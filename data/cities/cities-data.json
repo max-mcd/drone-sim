@@ -1,0 +1,65 @@
+{
+  "cities": {
+    "Metroville": {
+      "building_density_buildings_per_km2": 1200,
+      "average_building_height_m": 50,
+      "population_density_people_per_km2": 10000,
+      "takeoff_landing_locations": 150
+    },
+    "Skyline City": {
+      "building_density_buildings_per_km2": 800,
+      "average_building_height_m": 45,
+      "population_density_people_per_km2": 7500,
+      "takeoff_landing_locations": 120
+    },
+    "Urban Heights": {
+      "building_density_buildings_per_km2": 1500,
+      "average_building_height_m": 60,
+      "population_density_people_per_km2": 12000,
+      "takeoff_landing_locations": 180
+    },
+    "AeroTown": {
+      "building_density_buildings_per_km2": 1000,
+      "average_building_height_m": 55,
+      "population_density_people_per_km2": 9000,
+      "takeoff_landing_locations": 140
+    },
+    "Cloudscape": {
+      "building_density_buildings_per_km2": 950,
+      "average_building_height_m": 40,
+      "population_density_people_per_km2": 8500,
+      "takeoff_landing_locations": 130
+    },
+    "Windy Ridge": {
+      "building_density_buildings_per_km2": 700,
+      "average_building_height_m": 35,
+      "population_density_people_per_km2": 7000,
+      "takeoff_landing_locations": 110
+    },
+    "Valley Haven": {
+      "building_density_buildings_per_km2": 600,
+      "average_building_height_m": 30,
+      "population_density_people_per_km2": 5000,
+      "takeoff_landing_locations": 100
+    },
+    "Summit View": {
+      "building_density_buildings_per_km2": 750,
+      "average_building_height_m": 25,
+      "population_density_people_per_km2": 6000,
+      "takeoff_landing_locations": 95
+    },
+    "Crystal Bay": {
+      "building_density_buildings_per_km2": 500,
+      "average_building_height_m": 20,
+      "population_density_people_per_km2": 4000,
+      "takeoff_landing_locations": 85
+    },
+    "Golden Plains": {
+      "building_density_buildings_per_km2": 400,
+      "average_building_height_m": 15,
+      "population_density_people_per_km2": 3000,
+      "takeoff_landing_locations": 75
+    }
+  }
+}
+  
