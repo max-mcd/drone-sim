@@ -20,6 +20,8 @@ class Drone:
         self.destination = destination
         self.velocity = np.zeros(3)
         self.battery_remaining = model.battery_life * 3600  # Convert to seconds
+        self.successful = False
+        self.travel_time = 0.0
 
     def update(self, dt: float) -> bool:
         """
@@ -52,4 +54,11 @@ class Drone:
             self.position += self.velocity * dt
             self.battery_remaining -= dt
                 
+        # Update travel time
+        self.travel_time += dt
+        
+        # Check if destination reached
+        if np.allclose(self.position, self.destination, rtol=1e-05, atol=1e-05):
+            self.successful = True
+            
         return True

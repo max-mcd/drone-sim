@@ -140,12 +140,23 @@ def test_simulation_report(simulation):
     simulation.run()
     report = simulation.generate_report()
     
-    assert isinstance(report, dict)
-    assert 'drone_collisions' in report
-    assert 'building_collisions' in report
-    assert 'simulation_time' in report
-    assert 'city' in report
-    assert report['city'] == "Metroville"
+    # Report is now a string, not a dict
+    assert isinstance(report, str)
+    
+    # Check that all sections are present
+    assert "DRONE FLIGHT SIMULATION" in report
+    assert "FLIGHT STATISTICS" in report
+    assert "COLLISION SUMMARY" in report
+    assert "DETAILED COLLISION LOG" in report
+    
+    # Check that city name is included
+    assert simulation.environment.current_city.name in report
+    
+    # Check that tables are formatted correctly
+    assert "┌────────┬──────────┬────────┐" in report  # Table border
+    assert "│ Drone" in report  # Column header
+    assert "│ Building" in report  # Column header
+    assert "│ Time" in report  # Column header
 
 def test_simulation_with_building_collision(simulation):
     # Create a building at a known position
@@ -165,8 +176,11 @@ def test_simulation_with_building_collision(simulation):
     
     simulation.run()
     
-    # Check if building collision was detected
+    # Check if building collision was detected with coordinates
     assert len(simulation.building_collisions) > 0
     collision = simulation.building_collisions[0]
     assert collision[0] == 0  # First drone ID
     assert collision[2] >= 0  # Collision time
+    assert collision[3] == 50.0  # X coordinate
+    assert collision[4] == 50.0  # Y coordinate
+    assert collision[5] == 30.0  # Z coordinate

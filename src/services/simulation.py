@@ -8,6 +8,7 @@ from ..utils.config_loader import (
     load_drone_models,
     load_simulation_config,
 )
+from ..utils.report_generator import ReportGenerator
 from .collision_detector import CollisionDetector
 from .environment import Environment
 
@@ -48,7 +49,7 @@ class SimulationEngine:
         
         self.drones: List[Drone] = []
         self.drone_collisions: List[Tuple[int, int, float]] = []
-        self.building_collisions: List[Tuple[int, int, float]] = []
+        self.building_collisions: List[Tuple[int, int, float, float, float, float]] = []
         self.time = 0.0
 
     def initialize_simulation(self) -> None:
@@ -115,8 +116,9 @@ class SimulationEngine:
         1. Drone-to-drone collisions between all pairs of drones
         2. Drone-to-building collisions between each drone and all buildings
         
-        When collisions are detected, they are recorded in the simulation's collision lists
-        along with the drone IDs (or building ID) and current simulation time.
+        When collisions are detected, they are recorded in the simulation's collision lists:
+        - Drone collisions: (drone1_id, drone2_id, time)
+        - Building collisions: (drone_id, building_id, time, x, y, z)
         """
         for i in range(len(self.drones)):
             for j in range(i + 1, len(self.drones)):
@@ -125,14 +127,24 @@ class SimulationEngine:
 
             for j, building in enumerate(self.environment.current_city.buildings):
                 if CollisionDetector.check_building_collision(self.drones[i], building):
-                    self.building_collisions.append((i, j, self.time))
+                    pos = self.drones[i].position
+                    self.building_collisions.append((i, j, self.time, pos[0], pos[1], pos[2]))
 
-    def generate_report(self) -> dict:
-        return {
-            'drone_collisions': len(self.drone_collisions),
-            'drone_collision_details': self.drone_collisions,
-            'building_collisions': len(self.building_collisions),
-            'building_collision_details': self.building_collisions,
-            'simulation_time': self.time,
-            'city': self.environment.current_city.name
-        }
+    def _count_successful_flights(self) -> int:
+        return sum(1 for drone in self.drones if drone.successful)
+
+    def _calculate_avg_travel_time(self) -> float:
+        successful_times = [drone.travel_time for drone in self.drones if drone.successful]
+        return sum(successful_times) / len(successful_times) if successful_times else 0.0
+
+    def generate_report(self) -> str:
+        """Generate a formatted simulation report"""
+        return ReportGenerator.generate_report(
+            city_name=self.environment.current_city.name,
+            simulation_time=self.time,
+            total_flights=len(self.drones),
+            successful_flights=self._count_successful_flights(),
+            avg_travel_time=self._calculate_avg_travel_time(),
+            drone_collisions=self.drone_collisions,
+            building_collisions=self.building_collisions
+        )
