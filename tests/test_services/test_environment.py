@@ -1,6 +1,4 @@
-import csv
-import tempfile
-from pathlib import Path
+import json
 
 import pytest
 
@@ -8,24 +6,22 @@ from src.services.environment import Environment
 
 
 @pytest.fixture
-def sample_city_data():
-    with tempfile.NamedTemporaryFile(mode='w', delete=False, newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=[
-            'city_name', 'building_density', 'avg_height',
-            'population_density', 'takeoff_landing_locations'
-        ])
-        writer.writeheader()
-        writer.writerow({
-            'city_name': 'Test City',
-            'building_density': '50',
-            'avg_height': '30.0',
-            'population_density': '5000',
-            'takeoff_landing_locations': '3'
-        })
-        temp_path = f.name
+def sample_city_data(tmp_path):
+    data = {
+        "cities": {
+            "Test City": {
+                "building_density_per_km2": 50,
+                "avg_height_m": 30.0,
+                "population_density_per_km2": 5000,
+                "takeoff_landing_locations_count": 3
+            }
+        }
+    }
     
-    yield temp_path
-    Path(temp_path).unlink()  # Cleanup temp file after tests
+    city_path = tmp_path / "cities-test.json"
+    with city_path.open('w') as f:
+        json.dump(data, f)
+    return str(city_path)
 
 def test_environment_initialization(sample_city_data):
     dimensions = (1000.0, 1000.0, 100.0)

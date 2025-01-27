@@ -4,15 +4,35 @@ from typing import Dict
 from ..models.drone import DroneModel
 
 
+def load_city_data(city_data_path: str, city_name: str) -> dict:
+    """Load city parameters from cities data file
+    
+    Args:
+        city_data_path: Path to cities-data.json
+        city_name: Name of the city to load
+        
+    Returns:
+        dict containing city parameters:
+            - building_density: buildings per km²
+            - avg_height: average building height in meters
+            - population_density: people per km²
+            - takeoff_landing_locations: number of takeoff/landing points
+            
+    Raises:
+        ValueError: If city_name not found in cities data
+    """
+    with open(city_data_path) as f:
+        data = json.load(f)
+        if city_name not in data['cities']:
+            raise ValueError(f"City {city_name} not found in cities data")
+        
+        return data['cities'][city_name]
+
+
 def load_simulation_config(path: str) -> dict:
     with open(path) as f:
         data = json.load(f)
-        # Convert dimensions list to dict format
-        data['simulation']['dimensions'] = {
-            'x': data['simulation']['dimensions'][0],
-            'y': data['simulation']['dimensions'][1],
-            'z': data['simulation']['dimensions'][2]
-        }
+        
         # Convert coordinate lists to dicts for each drone
         for drone in data['drones']:
             drone['start'] = {
@@ -27,6 +47,7 @@ def load_simulation_config(path: str) -> dict:
             }
         return data
 
+
 def load_drone_models(path: str) -> Dict[str, DroneModel]:
     with open(path) as f:
         data = json.load(f)
@@ -35,7 +56,7 @@ def load_drone_models(path: str) -> Dict[str, DroneModel]:
                 max_speed=model['max_speed_m_s'],
                 range=model['range_km'] * 1000,  # Convert km to meters
                 dimensions={
-                    'length': model['dimensions_m'][0],  # Convert from list to dict
+                    'length': model['dimensions_m'][0],
                     'width': model['dimensions_m'][1],
                     'height': model['dimensions_m'][2]
                 },

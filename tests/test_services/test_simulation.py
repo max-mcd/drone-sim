@@ -11,9 +11,14 @@ from src.services.simulation import SimulationEngine
 def simulation_config(tmp_path):
     config = {
         'simulation': {
-            'dimensions': [1000.0, 1000.0, 500.0],
+            'city': "Metroville",
             'time_step': 0.1,
-            'duration': 3600.0
+            'duration': 3600.0,
+            'dimensions': {
+                'x': 2000.0,
+                'y': 2000.0,
+                'z': 800.0
+            }
         },
         'drones': [
             {
@@ -60,16 +65,25 @@ def drone_models(tmp_path):
 
 @pytest.fixture
 def city_data(tmp_path):
-    city_path = tmp_path / "cities.csv"
-    with city_path.open('w') as f:
-        f.write("city_name,building_density,avg_height,population_density,takeoff_landing_locations\n")
-        f.write("TestCity,50,30.0,5000,3\n")
+    data = {
+        "cities": {
+            "Metroville": {
+                "building_density_per_km2": 50,
+                "avg_height_m": 30.0,
+                "population_density_per_km2": 5000,
+                "takeoff_landing_locations_count": 3
+            }
+        }
+    }
+    
+    city_path = tmp_path / "cities-data.json"
+    json.dump(data, city_path.open('w'))
     return str(city_path)
 
 @pytest.fixture
 def simulation(simulation_config, drone_models, city_data):
     sim = SimulationEngine(simulation_config, drone_models, city_data)
-    sim.initialize_simulation("TestCity")
+    sim.initialize_simulation()
     return sim
 
 def test_simulation_initialization(simulation):
@@ -78,7 +92,7 @@ def test_simulation_initialization(simulation):
     assert len(simulation.drone_collisions) == 0
     assert len(simulation.building_collisions) == 0
     assert simulation.environment.current_city is not None
-    assert simulation.environment.current_city.name == "TestCity"
+    assert simulation.environment.current_city.name == "Metroville"
 
 def test_drone_initialization(simulation):
     assert len(simulation.drones) == 2
@@ -131,7 +145,7 @@ def test_simulation_report(simulation):
     assert 'building_collisions' in report
     assert 'simulation_time' in report
     assert 'city' in report
-    assert report['city'] == "TestCity"
+    assert report['city'] == "Metroville"
 
 def test_simulation_with_building_collision(simulation):
     # Create a building at a known position

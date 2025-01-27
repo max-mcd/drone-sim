@@ -1,0 +1,512 @@
+diff --git a/data/cities/cities-data.json b/data/cities/cities-data.json
+index 1b48b34..cc77504 100644
+--- a/data/cities/cities-data.json
++++ b/data/cities/cities-data.json
+@@ -1,64 +1,64 @@
+ {
+   "cities": {
+     "Metroville": {
+-      "building_density_buildings_per_km2": 1200,
+-      "average_building_height_m": 50,
+-      "population_density_people_per_km2": 10000,
+-      "takeoff_landing_locations": 150
++      "building_density_per_km2": 1200,
++      "avg_height_m": 50.0,
++      "population_density_per_km2": 10000,
++      "takeoff_landing_locations_count": 150
+     },
+     "Skyline City": {
+-      "building_density_buildings_per_km2": 800,
+-      "average_building_height_m": 45,
+-      "population_density_people_per_km2": 7500,
+-      "takeoff_landing_locations": 120
++      "building_density_per_km2": 800,
++      "avg_height_m": 45.0,
++      "population_density_per_km2": 7500,
++      "takeoff_landing_locations_count": 120
+     },
+     "Urban Heights": {
+-      "building_density_buildings_per_km2": 1500,
+-      "average_building_height_m": 60,
+-      "population_density_people_per_km2": 12000,
+-      "takeoff_landing_locations": 180
++      "building_density_per_km2": 1500,
++      "avg_height_m": 60.0,
++      "population_density_per_km2": 12000,
++      "takeoff_landing_locations_count": 180
+     },
+     "AeroTown": {
+-      "building_density_buildings_per_km2": 1000,
+-      "average_building_height_m": 55,
+-      "population_density_people_per_km2": 9000,
+-      "takeoff_landing_locations": 140
++      "building_density_per_km2": 1000,
++      "avg_height_m": 55.0,
++      "population_density_per_km2": 9000,
++      "takeoff_landing_locations_count": 140
+     },
+     "Cloudscape": {
+-      "building_density_buildings_per_km2": 950,
+-      "average_building_height_m": 40,
+-      "population_density_people_per_km2": 8500,
+-      "takeoff_landing_locations": 130
++      "building_density_per_km2": 950,
++      "avg_height_m": 40.0,
++      "population_density_per_km2": 8500,
++      "takeoff_landing_locations_count": 130
+     },
+     "Windy Ridge": {
+-      "building_density_buildings_per_km2": 700,
+-      "average_building_height_m": 35,
+-      "population_density_people_per_km2": 7000,
+-      "takeoff_landing_locations": 110
++      "building_density_per_km2": 700,
++      "avg_height_m": 35.0,
++      "population_density_per_km2": 7000,
++      "takeoff_landing_locations_count": 110
+     },
+     "Valley Haven": {
+-      "building_density_buildings_per_km2": 600,
+-      "average_building_height_m": 30,
+-      "population_density_people_per_km2": 5000,
+-      "takeoff_landing_locations": 100
++      "building_density_per_km2": 600,
++      "avg_height_m": 30.0,
++      "population_density_per_km2": 5000,
++      "takeoff_landing_locations_count": 100
+     },
+     "Summit View": {
+-      "building_density_buildings_per_km2": 750,
+-      "average_building_height_m": 25,
+-      "population_density_people_per_km2": 6000,
+-      "takeoff_landing_locations": 95
++      "building_density_per_km2": 750,
++      "avg_height_m": 25.0,
++      "population_density_per_km2": 6000,
++      "takeoff_landing_locations_count": 95
+     },
+     "Crystal Bay": {
+-      "building_density_buildings_per_km2": 500,
+-      "average_building_height_m": 20,
+-      "population_density_people_per_km2": 4000,
+-      "takeoff_landing_locations": 85
++      "building_density_per_km2": 500,
++      "avg_height_m": 20.0,
++      "population_density_per_km2": 4000,
++      "takeoff_landing_locations_count": 85
+     },
+     "Golden Plains": {
+-      "building_density_buildings_per_km2": 400,
+-      "average_building_height_m": 15,
+-      "population_density_people_per_km2": 3000,
+-      "takeoff_landing_locations": 75
++      "building_density_per_km2": 400,
++      "avg_height_m": 15.0,
++      "population_density_per_km2": 3000,
++      "takeoff_landing_locations_count": 75
+     }
+   }
+ }
+diff --git a/data/config/simulation_config.json b/data/config/simulation_config.json
+index d4eadb5..d2bcaff 100644
+--- a/data/config/simulation_config.json
++++ b/data/config/simulation_config.json
+@@ -1,8 +1,13 @@
+ {
+     "simulation": {
+-        "dimensions": [1000.0, 1000.0, 500.0],
+         "time_step": 0.5,
+-        "duration": 120.0
++        "duration": 120.0,
++        "city": "Metroville",
++        "dimensions": {
++            "x": 2000.0,
++            "y": 2000.0,
++            "z": 800.0
++        }
+     },
+     "drones": [
+         {
+diff --git a/pyproject.toml b/pyproject.toml
+index 2830fe6..43c48e4 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -6,7 +6,8 @@ requires-python = ">=3.11"
+ 
+ dependencies = [
+     "numpy>=1.21.0",
+-    "pytest>=7.0.0"
++    "pytest>=7.0.0",
++    "jsonschema>=4.17.3",
+ ]
+ 
+ [project.optional-dependencies]
+@@ -23,6 +24,9 @@ build-backend = "hatchling.build"
+ testpaths = ["tests"]
+ python_files = ["test_*.py"]
+ addopts = "-v"  # Always run with verbose output
++markers = [
++    "integration: marks tests as integration tests",
++]
+ 
+ [tool.hatch.build.targets.wheel]
+ packages = ["src"]
+@@ -48,4 +52,4 @@ ignore = [
+ ]
+ 
+ [project.scripts]
+-test-drones = "pytest:console_main"
+\ No newline at end of file
++run-tests = "pytest:main"
+\ No newline at end of file
+diff --git a/scripts/test.sh b/scripts/test.sh
+index 0519ecb..5639586 100644
+--- a/scripts/test.sh
++++ b/scripts/test.sh
+@@ -1 +1,2 @@
+- 
+\ No newline at end of file
++#!/bin/bash
++python -m pytest -v 
+\ No newline at end of file
+diff --git a/src/services/environment.py b/src/services/environment.py
+index 379ac2c..32a4307 100644
+--- a/src/services/environment.py
++++ b/src/services/environment.py
+@@ -1,5 +1,5 @@
+-import csv
+-from typing import Dict, List, Optional, Tuple
++import json
++from typing import List, Tuple
+ 
+ import numpy as np
+ 
+@@ -10,42 +10,29 @@ from ..models.city_data import CityData
+ class Environment:
+     def __init__(self, city_data_path: str, dimensions: Tuple[float, float, float]):
+         self.dimensions = dimensions
+-        self.cities: Dict[str, CityData] = self._load_city_data(city_data_path)
+-        self.current_city: Optional[CityData] = None
+-
+-    def _load_city_data(self, path: str) -> Dict[str, CityData]:
+-        """Load city data from CSV file and generate buildings.
+-
+-        Args:
+-            path: Path to CSV file containing city data
+-
+-        Returns:
+-            Dict mapping city names to CityData objects with generated buildings
+-
+-        Raises:
+-            FileNotFoundError: If CSV file does not exist
+-            KeyError: If required columns are missing from CSV
+-        """
+-
+-        cities = {}
+-        with open(path, 'r') as f:
+-            reader = csv.DictReader(f)
+-            for row in reader:
+-                # Generate random buildings based on density
+-                buildings = self._generate_buildings(
+-                    int(row['building_density']),
+-                    float(row['avg_height']),
+-                    self.dimensions
+-                )
+-                cities[row['city_name']] = CityData(
+-                    name=row['city_name'],
+-                    building_density=int(row['building_density']),
+-                    avg_height=float(row['avg_height']),
+-                    population_density=int(row['population_density']),
+-                    takeoff_locations=int(row['takeoff_landing_locations']),
+-                    buildings=buildings
+-                )
+-        return cities
++        with open(city_data_path, 'r') as f:
++            data = json.load(f)
++            self.cities = {
++                name: self._generate_city(city_data, name)
++                for name, city_data in data['cities'].items()
++            }
++        self.current_city = None
++
++    def _generate_city(self, city_data: dict, city_name: str) -> CityData:
++        """Generate a city from the provided parameters"""
++        buildings = self._generate_buildings(
++            int(city_data['building_density_per_km2']),
++            float(city_data['avg_height_m']),
++            self.dimensions
++        )
++        return CityData(
++            name=city_name,
++            building_density=int(city_data['building_density_per_km2']),
++            avg_height=float(city_data['avg_height_m']),
++            population_density=int(city_data['population_density_per_km2']),
++            takeoff_locations=int(city_data['takeoff_landing_locations_count']),
++            buildings=buildings
++        )
+ 
+     def _generate_buildings(self, density: int, avg_height: float, dimensions: Tuple[float, float, float]) -> List[Building]:
+         """Building generation uses different probability distributions to model realistic city layouts:
+@@ -95,17 +82,7 @@ class Environment:
+         return buildings
+ 
+     def set_city(self, city_name: str) -> None:
+-        """Set the current city for the simulation environment.
+-        
+-        This method updates the current_city attribute to the city specified by city_name.
+-        The city must exist in the environment's cities dictionary.
+-        
+-        Args:
+-            city_name: str - Name of the city to set as current
+-            
+-        Raises:
+-            ValueError: If the specified city name is not found in the available cities
+-        """
+-        self.current_city = self.cities.get(city_name)
+-        if not self.current_city:
+-            raise ValueError(f"City {city_name} not found")
+\ No newline at end of file
++        """Set the current city by name"""
++        if city_name not in self.cities:
++            raise ValueError(f"City {city_name} not found")
++        self.current_city = self.cities[city_name]
+\ No newline at end of file
+diff --git a/src/services/simulation.py b/src/services/simulation.py
+index 56819ed..a12bd29 100644
+--- a/src/services/simulation.py
++++ b/src/services/simulation.py
+@@ -3,9 +3,13 @@ from typing import List, Tuple
+ import numpy as np
+ 
+ from ..models.drone import Drone
+-from ..services.collision_detector import CollisionDetector
+-from ..services.environment import Environment
+-from ..utils.config_loader import load_drone_models, load_simulation_config
++from ..utils.config_loader import (
++    load_city_data,
++    load_drone_models,
++    load_simulation_config,
++)
++from .collision_detector import CollisionDetector
++from .environment import Environment
+ 
+ 
+ class SimulationEngine:
+@@ -26,21 +30,29 @@ class SimulationEngine:
+     def __init__(self, config_path: str, drone_data_path: str, city_data_path: str):
+         self.config = load_simulation_config(config_path)
+         self.drone_models = load_drone_models(drone_data_path)
++        
++        # Load city data first
++        self.city_data = load_city_data(city_data_path, self.config['simulation']['city'])
++        
++        # Initialize environment with simulation dimensions and city data path
+         self.environment = Environment(
+-            city_data_path,
++            city_data_path,  # Pass the path, not the data
+             (
+                 self.config['simulation']['dimensions']['x'],
+                 self.config['simulation']['dimensions']['y'],
+                 self.config['simulation']['dimensions']['z']
+             )
+         )
++        # Initialize city using config
++        self.environment.set_city(self.config['simulation']['city'])
++        
+         self.drones: List[Drone] = []
+         self.drone_collisions: List[Tuple[int, int, float]] = []
+         self.building_collisions: List[Tuple[int, int, float]] = []
+         self.time = 0.0
+ 
+-    def initialize_simulation(self, city_name: str) -> None:
+-        self.environment.set_city(city_name)
++    def initialize_simulation(self) -> None:
++        # City is already initialized in __init__
+         self._initialize_drones()
+ 
+     def _initialize_drones(self) -> None:
+diff --git a/src/utils/config_loader.py b/src/utils/config_loader.py
+index 9e4e2ae..c14d684 100644
+--- a/src/utils/config_loader.py
++++ b/src/utils/config_loader.py
+@@ -4,15 +4,35 @@ from typing import Dict
+ from ..models.drone import DroneModel
+ 
+ 
++def load_city_data(city_data_path: str, city_name: str) -> dict:
++    """Load city parameters from cities data file
++    
++    Args:
++        city_data_path: Path to cities-data.json
++        city_name: Name of the city to load
++        
++    Returns:
++        dict containing city parameters:
++            - building_density: buildings per km²
++            - avg_height: average building height in meters
++            - population_density: people per km²
++            - takeoff_landing_locations: number of takeoff/landing points
++            
++    Raises:
++        ValueError: If city_name not found in cities data
++    """
++    with open(city_data_path) as f:
++        data = json.load(f)
++        if city_name not in data['cities']:
++            raise ValueError(f"City {city_name} not found in cities data")
++        
++        return data['cities'][city_name]
++
++
+ def load_simulation_config(path: str) -> dict:
+     with open(path) as f:
+         data = json.load(f)
+-        # Convert dimensions list to dict format
+-        data['simulation']['dimensions'] = {
+-            'x': data['simulation']['dimensions'][0],
+-            'y': data['simulation']['dimensions'][1],
+-            'z': data['simulation']['dimensions'][2]
+-        }
++        
+         # Convert coordinate lists to dicts for each drone
+         for drone in data['drones']:
+             drone['start'] = {
+@@ -27,6 +47,7 @@ def load_simulation_config(path: str) -> dict:
+             }
+         return data
+ 
++
+ def load_drone_models(path: str) -> Dict[str, DroneModel]:
+     with open(path) as f:
+         data = json.load(f)
+@@ -35,7 +56,7 @@ def load_drone_models(path: str) -> Dict[str, DroneModel]:
+                 max_speed=model['max_speed_m_s'],
+                 range=model['range_km'] * 1000,  # Convert km to meters
+                 dimensions={
+-                    'length': model['dimensions_m'][0],  # Convert from list to dict
++                    'length': model['dimensions_m'][0],
+                     'width': model['dimensions_m'][1],
+                     'height': model['dimensions_m'][2]
+                 },
+diff --git a/tests/test_services/test_environment.py b/tests/test_services/test_environment.py
+index a35e39c..4ecc3c5 100644
+--- a/tests/test_services/test_environment.py
++++ b/tests/test_services/test_environment.py
+@@ -1,6 +1,4 @@
+-import csv
+-import tempfile
+-from pathlib import Path
++import json
+ 
+ import pytest
+ 
+@@ -8,24 +6,22 @@ from src.services.environment import Environment
+ 
+ 
+ @pytest.fixture
+-def sample_city_data():
+-    with tempfile.NamedTemporaryFile(mode='w', delete=False, newline='') as f:
+-        writer = csv.DictWriter(f, fieldnames=[
+-            'city_name', 'building_density', 'avg_height',
+-            'population_density', 'takeoff_landing_locations'
+-        ])
+-        writer.writeheader()
+-        writer.writerow({
+-            'city_name': 'Test City',
+-            'building_density': '50',
+-            'avg_height': '30.0',
+-            'population_density': '5000',
+-            'takeoff_landing_locations': '3'
+-        })
+-        temp_path = f.name
++def sample_city_data(tmp_path):
++    data = {
++        "cities": {
++            "Test City": {
++                "building_density_per_km2": 50,
++                "avg_height_m": 30.0,
++                "population_density_per_km2": 5000,
++                "takeoff_landing_locations_count": 3
++            }
++        }
++    }
+     
+-    yield temp_path
+-    Path(temp_path).unlink()  # Cleanup temp file after tests
++    city_path = tmp_path / "cities-test.json"
++    with city_path.open('w') as f:
++        json.dump(data, f)
++    return str(city_path)
+ 
+ def test_environment_initialization(sample_city_data):
+     dimensions = (1000.0, 1000.0, 100.0)
+diff --git a/tests/test_services/test_simulation.py b/tests/test_services/test_simulation.py
+index c9736df..f8dc542 100644
+--- a/tests/test_services/test_simulation.py
++++ b/tests/test_services/test_simulation.py
+@@ -11,9 +11,14 @@ from src.services.simulation import SimulationEngine
+ def simulation_config(tmp_path):
+     config = {
+         'simulation': {
+-            'dimensions': [1000.0, 1000.0, 500.0],
++            'city': "Metroville",
+             'time_step': 0.1,
+-            'duration': 3600.0
++            'duration': 3600.0,
++            'dimensions': {
++                'x': 2000.0,
++                'y': 2000.0,
++                'z': 800.0
++            }
+         },
+         'drones': [
+             {
+@@ -60,16 +65,25 @@ def drone_models(tmp_path):
+ 
+ @pytest.fixture
+ def city_data(tmp_path):
+-    city_path = tmp_path / "cities.csv"
+-    with city_path.open('w') as f:
+-        f.write("city_name,building_density,avg_height,population_density,takeoff_landing_locations\n")
+-        f.write("TestCity,50,30.0,5000,3\n")
++    data = {
++        "cities": {
++            "Metroville": {
++                "building_density_per_km2": 50,
++                "avg_height_m": 30.0,
++                "population_density_per_km2": 5000,
++                "takeoff_landing_locations_count": 3
++            }
++        }
++    }
++    
++    city_path = tmp_path / "cities-data.json"
++    json.dump(data, city_path.open('w'))
+     return str(city_path)
+ 
+ @pytest.fixture
+ def simulation(simulation_config, drone_models, city_data):
+     sim = SimulationEngine(simulation_config, drone_models, city_data)
+-    sim.initialize_simulation("TestCity")
++    sim.initialize_simulation()
+     return sim
+ 
+ def test_simulation_initialization(simulation):
+@@ -78,7 +92,7 @@ def test_simulation_initialization(simulation):
+     assert len(simulation.drone_collisions) == 0
+     assert len(simulation.building_collisions) == 0
+     assert simulation.environment.current_city is not None
+-    assert simulation.environment.current_city.name == "TestCity"
++    assert simulation.environment.current_city.name == "Metroville"
+ 
+ def test_drone_initialization(simulation):
+     assert len(simulation.drones) == 2
+@@ -131,7 +145,7 @@ def test_simulation_report(simulation):
+     assert 'building_collisions' in report
+     assert 'simulation_time' in report
+     assert 'city' in report
+-    assert report['city'] == "TestCity"
++    assert report['city'] == "Metroville"
+ 
+ def test_simulation_with_building_collision(simulation):
+     # Create a building at a known position

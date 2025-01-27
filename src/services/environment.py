@@ -1,5 +1,5 @@
-import csv
-from typing import Dict, List, Optional, Tuple
+import json
+from typing import List, Tuple
 
 import numpy as np
 
@@ -10,42 +10,29 @@ from ..models.city_data import CityData
 class Environment:
     def __init__(self, city_data_path: str, dimensions: Tuple[float, float, float]):
         self.dimensions = dimensions
-        self.cities: Dict[str, CityData] = self._load_city_data(city_data_path)
-        self.current_city: Optional[CityData] = None
+        with open(city_data_path, 'r') as f:
+            data = json.load(f)
+            self.cities = {
+                name: self._generate_city(city_data, name)
+                for name, city_data in data['cities'].items()
+            }
+        self.current_city = None
 
-    def _load_city_data(self, path: str) -> Dict[str, CityData]:
-        """Load city data from CSV file and generate buildings.
-
-        Args:
-            path: Path to CSV file containing city data
-
-        Returns:
-            Dict mapping city names to CityData objects with generated buildings
-
-        Raises:
-            FileNotFoundError: If CSV file does not exist
-            KeyError: If required columns are missing from CSV
-        """
-
-        cities = {}
-        with open(path, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                # Generate random buildings based on density
-                buildings = self._generate_buildings(
-                    int(row['building_density']),
-                    float(row['avg_height']),
-                    self.dimensions
-                )
-                cities[row['city_name']] = CityData(
-                    name=row['city_name'],
-                    building_density=int(row['building_density']),
-                    avg_height=float(row['avg_height']),
-                    population_density=int(row['population_density']),
-                    takeoff_locations=int(row['takeoff_landing_locations']),
-                    buildings=buildings
-                )
-        return cities
+    def _generate_city(self, city_data: dict, city_name: str) -> CityData:
+        """Generate a city from the provided parameters"""
+        buildings = self._generate_buildings(
+            int(city_data['building_density_per_km2']),
+            float(city_data['avg_height_m']),
+            self.dimensions
+        )
+        return CityData(
+            name=city_name,
+            building_density=int(city_data['building_density_per_km2']),
+            avg_height=float(city_data['avg_height_m']),
+            population_density=int(city_data['population_density_per_km2']),
+            takeoff_locations=int(city_data['takeoff_landing_locations_count']),
+            buildings=buildings
+        )
 
     def _generate_buildings(self, density: int, avg_height: float, dimensions: Tuple[float, float, float]) -> List[Building]:
         """Building generation uses different probability distributions to model realistic city layouts:
@@ -95,17 +82,7 @@ class Environment:
         return buildings
 
     def set_city(self, city_name: str) -> None:
-        """Set the current city for the simulation environment.
-        
-        This method updates the current_city attribute to the city specified by city_name.
-        The city must exist in the environment's cities dictionary.
-        
-        Args:
-            city_name: str - Name of the city to set as current
-            
-        Raises:
-            ValueError: If the specified city name is not found in the available cities
-        """
-        self.current_city = self.cities.get(city_name)
-        if not self.current_city:
+        """Set the current city by name"""
+        if city_name not in self.cities:
             raise ValueError(f"City {city_name} not found")
+        self.current_city = self.cities[city_name]

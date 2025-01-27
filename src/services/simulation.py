@@ -3,9 +3,13 @@ from typing import List, Tuple
 import numpy as np
 
 from ..models.drone import Drone
-from ..services.collision_detector import CollisionDetector
-from ..services.environment import Environment
-from ..utils.config_loader import load_drone_models, load_simulation_config
+from ..utils.config_loader import (
+    load_city_data,
+    load_drone_models,
+    load_simulation_config,
+)
+from .collision_detector import CollisionDetector
+from .environment import Environment
 
 
 class SimulationEngine:
@@ -26,21 +30,29 @@ class SimulationEngine:
     def __init__(self, config_path: str, drone_data_path: str, city_data_path: str):
         self.config = load_simulation_config(config_path)
         self.drone_models = load_drone_models(drone_data_path)
+        
+        # Load city data first
+        self.city_data = load_city_data(city_data_path, self.config['simulation']['city'])
+        
+        # Initialize environment with simulation dimensions and city data path
         self.environment = Environment(
-            city_data_path,
+            city_data_path,  # Pass the path, not the data
             (
                 self.config['simulation']['dimensions']['x'],
                 self.config['simulation']['dimensions']['y'],
                 self.config['simulation']['dimensions']['z']
             )
         )
+        # Initialize city using config
+        self.environment.set_city(self.config['simulation']['city'])
+        
         self.drones: List[Drone] = []
         self.drone_collisions: List[Tuple[int, int, float]] = []
         self.building_collisions: List[Tuple[int, int, float]] = []
         self.time = 0.0
 
-    def initialize_simulation(self, city_name: str) -> None:
-        self.environment.set_city(city_name)
+    def initialize_simulation(self) -> None:
+        # City is already initialized in __init__
         self._initialize_drones()
 
     def _initialize_drones(self) -> None:
