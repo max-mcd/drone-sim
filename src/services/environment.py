@@ -11,6 +11,18 @@ class Environment:
         self.current_city: Optional[CityData] = None
 
     def _load_city_data(self, path: str) -> Dict[str, CityData]:
+        """Load city data from CSV file and generate buildings.
+
+        Args:
+            path: Path to CSV file containing city data
+
+        Returns:
+            Dict mapping city names to CityData objects with generated buildings
+
+        Raises:
+            FileNotFoundError: If CSV file does not exist
+            KeyError: If required columns are missing from CSV
+        """
 
         cities = {}
         with open(path, 'r') as f:
