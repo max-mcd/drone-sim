@@ -1,8 +1,11 @@
-from typing import Dict, List, Tuple, Optional
 import csv
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
-from ..models.city_data import CityData
+
 from ..models.building import Building
+from ..models.city_data import CityData
+
 
 class Environment:
     def __init__(self, city_data_path: str, dimensions: Tuple[float, float, float]):

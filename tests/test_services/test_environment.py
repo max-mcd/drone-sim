@@ -1,8 +1,11 @@
-import pytest
-from pathlib import Path
-import tempfile
 import csv
+import tempfile
+from pathlib import Path
+
+import pytest
+
 from src.services.environment import Environment
+
 
 @pytest.fixture
 def sample_city_data():

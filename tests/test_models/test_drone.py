@@ -1,6 +1,8 @@
-import pytest
 import numpy as np
-from src.models.drone import DroneModel, Drone
+import pytest
+
+from src.models.drone import Drone, DroneModel
+
 
 @pytest.fixture
 def sample_drone_model():

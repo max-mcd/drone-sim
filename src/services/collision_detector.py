@@ -1,6 +1,8 @@
 import numpy as np
-from ..models.drone import Drone
+
 from ..models.building import Building
+from ..models.drone import Drone
+
 
 class CollisionDetector:
     """

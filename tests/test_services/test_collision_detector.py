@@ -1,8 +1,10 @@
-import pytest
 import numpy as np
-from src.services.collision_detector import CollisionDetector
-from src.models.drone import DroneModel, Drone
+import pytest
+
 from src.models.building import Building
+from src.models.drone import Drone, DroneModel
+from src.services.collision_detector import CollisionDetector
+
 
 @pytest.fixture
 def sample_drone_model():

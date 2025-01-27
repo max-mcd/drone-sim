@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import List
+
 from .building import Building
+
 
 @dataclass
 class CityData:

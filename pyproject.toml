@@ -26,3 +26,23 @@ python_files = ["test_*.py"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[tool.ruff]
+# General settings like 'exclude' still go here
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+]
+line-length = 88
+
+# Linting specific settings should now be under [tool.ruff.lint]
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "F",  # pyflakes
+    "I",  # isort
+]
+ignore = [
+    "E501",  # line too long
+]

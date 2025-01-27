@@ -1,7 +1,8 @@
-import yaml
 import json
 from typing import Dict
+
 from ..models.drone import DroneModel
+
 
 def load_simulation_config(path: str) -> dict:
     with open(path) as f:
