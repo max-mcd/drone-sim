@@ -19,20 +19,11 @@ class Drone:
         self.successful = False
         self.travel_time = 0.0
         self.status = 'active'  # Can be: 'active', 'collided', 'successful'
-        self.logger = logging.getLogger(__name__)
-        # Set logging level to INFO or higher to suppress debug messages
-        self.logger.setLevel(logging.DEBUG) # TODO: Change to DEBUG for more detailed logging
 
     def update(self, dt: float) -> bool:
         """Update drone position and state"""
         if self.status != 'active':
-            logger.info(f"""
-                Drone {self.id} inactive:
-                Status: {self.status}
-                Position: {self.position}
-                Destination: {self.destination}
-                Distance remaining: {np.linalg.norm(self.destination - self.position):.1f}m
-            """)
+            logger.info(f"Drone {self.id} inactive...")
             return False
             
         # Calculate vector to destination

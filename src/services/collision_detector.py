@@ -7,7 +7,6 @@ from ..models.drone import Drone
 
 # Configure collision detector logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Change from DEBUG to INFO to suppress these messages
 
 class CollisionDetector:
     """
@@ -34,13 +33,8 @@ class CollisionDetector:
         distance = np.linalg.norm(pos1 - pos2)
         
         # Debug log when drones are getting close
-        if distance < 50.0:  # Log when within 50m
-            logger.info(f"""
-                Checking potential collision:
-                Drone {drone1.id} at {pos1} (status: {drone1.status})
-                Drone {drone2.id} at {pos2} (status: {drone2.status})
-                Distance between drones: {distance:.1f}m
-            """)
+        if distance < 50.0:
+            logger.info(f"Checking potential collision...")
 
         return distance < CollisionDetector.COLLISION_THRESHOLD
 

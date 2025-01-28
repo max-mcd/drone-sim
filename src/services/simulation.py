@@ -1,7 +1,8 @@
 import logging
-from typing import List, Tuple
 import time
+from typing import List, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 from ..models.drone import Drone
@@ -38,14 +39,14 @@ class SimulationEngine:
     def __init__(self, config_path: str, drone_data_path: str, city_data_path: str, real_time: bool = True):
         self.config = load_simulation_config(config_path)
         self.drone_models = load_drone_models(drone_data_path)
-        self.real_time = real_time  # Keep this as we need it
+        self.real_time = real_time  # Store real_time mode
         
         # Load city data first
         self.city_data = load_city_data(city_data_path, self.config['simulation']['city'])
         
         # Initialize environment with simulation dimensions and city data path
         self.environment = Environment(
-            city_data_path,  # Pass the path, not the data
+            city_data_path,
             (
                 self.config['simulation']['dimensions']['x'],
                 self.config['simulation']['dimensions']['y'],
@@ -62,17 +63,20 @@ class SimulationEngine:
         
         self.state_manager = SimulationStateManager()
         
-        # Create and register visualizer
+        # Create and register visualizer - pass real_time mode
         dimensions = (
             self.config['simulation']['dimensions']['x'],
             self.config['simulation']['dimensions']['y'],
             self.config['simulation']['dimensions']['z']
         )
-        self.visualizer = MatplotlibVisualizer(dimensions, real_time=real_time)
+        self.visualizer = MatplotlibVisualizer(dimensions, real_time=self.real_time)
         self.state_manager.add_observer(self.visualizer.on_state_update)
-        self.logger = logging.getLogger(__name__)
-        # Set logging level to INFO or higher to suppress debug messages
-        self.logger.setLevel(logging.DEBUG) # TODO: Change to DEBUG for more detailed logging
+        
+        # Add simulation state flag
+        self.simulation_complete = False
+        
+        # Register completion callback
+        self.visualizer.register_completion_callback(self._on_simulation_complete)
 
     def initialize_simulation(self) -> None:
         # City is already initialized in __init__
@@ -117,14 +121,33 @@ class SimulationEngine:
                 'successful': d.successful,
                 'status': d.status
             } for d in self.drones],
-            buildings=[{
-                'position': [b.x, b.y],
-                'dimensions': [b.width, b.length, b.height]
-            } for b in self.environment.current_city.buildings],
+            buildings=self.environment.current_city.buildings,
             drone_collisions=self.drone_collisions,
             building_collisions=self.building_collisions
         )
+        
+        # Direct update - no more queue needed
         self.state_manager.update_state(new_state)
+
+    def _on_simulation_complete(self, final_time):
+        """Called by visualizer when simulation is complete"""
+        logger.info(f"Simulation completed at time {final_time:.1f}s")
+        self.simulation_complete = True
+        
+        try:
+            # Generate and print report
+            report = self.generate_report()
+            print(report)
+            
+            # Save final state
+            self.visualizer.save_plot()
+            
+            # Let the animation continue running until window is closed
+            if self.real_time:
+                plt.gcf().canvas.manager.window.title("Simulation Complete - Close window to exit")
+                
+        except Exception as e:
+            logger.error(f"Error during simulation cleanup: {e}")
 
     def run(self) -> None:
         """
@@ -143,72 +166,47 @@ class SimulationEngine:
         """
         dt = self.config['simulation']['time_step']
         duration = self.config['simulation']['duration']
-
-        while self.time < duration:
-            # Calculate and log maximum possible position change
+        
+        # Log initial setup
+        for drone in self.drones:
+            logger.info(f"""
+                Initial drone {drone.id} setup:
+                Speed: {drone.model.max_speed} m/s
+                Distance to travel: {np.linalg.norm(drone.destination - drone.start_pos):.1f}m
+                Expected travel time: {np.linalg.norm(drone.destination - drone.start_pos)/drone.model.max_speed:.1f}s
+            """)
+        
+        # Run simulation
+        while self.time < duration and not self.simulation_complete:
+            # Update drones
             for drone in self.drones:
-                speed = np.linalg.norm(drone.velocity)
-                max_distance = speed * dt
-                if speed > 0:
-                    logger.debug(f"""
-                        Drone {drone.id} movement:
-                        Speed: {speed:.1f} m/s
-                        Distance per timestep: {max_distance:.1f}m
-                        Position: {drone.position}
-                        Time: {self.time:.1f}s
-                    """)
-                
-                # Check if timestep might cause collision misses
-                for other in self.drones:
-                    if other.id != drone.id:
-                        rel_speed = np.linalg.norm(drone.velocity - other.velocity)
-                        if rel_speed * dt > CollisionDetector.COLLISION_THRESHOLD:
-                            logger.warning(f"""
-                                Potential collision miss risk:
-                                Drones {drone.id} and {other.id}
-                                Relative speed: {rel_speed:.1f} m/s
-                                Distance covered in timestep: {rel_speed * dt:.1f}m
-                                Collision threshold: {CollisionDetector.COLLISION_THRESHOLD}m
-                            """)
+                drone.update(dt)
             
-            # Update drone positions
-            state_changes = False
-            for drone in self.drones:
-                if drone.update(dt):
-                    state_changes = True
-
-            # Check for collisions
+            # Check collisions
             self._check_all_collisions()
             
-            # Update state and visualization if there were changes
-            if state_changes:
-                self._update_state()
+            # Create and push new state
+            self._update_state()
             
-            # Check if all drones are in terminal state
-            drone_states = [(drone.id, drone.status) for drone in self.drones]
-            all_drones_finished = all(
-                drone.status == 'collided' or drone.status == 'successful'
-                for drone in self.drones
-            )
-            
-            if all_drones_finished:
-                # Always ensure final state is visualized
+            # Check if all drones are done
+            if all(drone.status in ['successful', 'collided'] for drone in self.drones):
+                logger.info("All drones have completed their routes")
+                self.simulation_complete = True
+                # Push one final state update before stopping
                 self._update_state()
-                status_summary = "\n".join(
-                    f"Drone {id}: {status}" 
-                    for id, status in drone_states
-                )
-                logger.info(f"""Simulation ended early - all drones have finished:
-{status_summary}""")
-                # Add a small delay to ensure final state is rendered
-                if not self.real_time:
-                    time.sleep(0.1)
-                break
-
+                break  # Exit the simulation loop
+            
             self.time += dt
+            
+            # Small delay only in real-time mode
+            if self.real_time:
+                time.sleep(dt)
 
-        # Save final state
-        self.visualizer.save_plot()
+        # Keep visualization window open if not already closed
+        if self.real_time and not self.simulation_complete:
+            plt.gcf().canvas.manager.window.title("Simulation Complete - Close window to exit")
+            plt.gcf().canvas.mpl_connect('close_event', lambda evt: self._on_simulation_complete(self.time))
+            plt.show(block=True)
 
     def _check_all_collisions(self) -> None:
         """
@@ -285,12 +283,15 @@ class SimulationEngine:
 
     def generate_report(self) -> str:
         """Generate a formatted simulation report"""
+        successful_times = [d.travel_time for d in self.drones if d.successful]
+        avg_success_time = sum(successful_times) / len(successful_times) if successful_times else 0.0
+        
         return ReportGenerator.generate_report(
             city_name=self.environment.current_city.name,
-            simulation_time=self.time,
+            simulation_time=self.time,  # Total time until all drones finished
             total_flights=len(self.drones),
             successful_flights=self._count_successful_flights(),
-            avg_travel_time=self._calculate_avg_travel_time(),
+            avg_travel_time=avg_success_time,  # Average time for successful flights only
             drone_collisions=self.drone_collisions,
             building_collisions=self.building_collisions
         )

@@ -28,6 +28,39 @@ TODO Visualization Improvements:
    - Add speed controls
    - Add zoom/pan controls
    - Add drone selection for detailed view
+
+6. Legend Placement
+   - Move legend outside the plot grid to the right side
+   - Update __init__ to adjust figure size and subplot parameters:
+     self.fig = plt.figure(figsize=(16, 8))  # Wider figure to accommodate legend
+     plt.subplots_adjust(right=0.85)  # Leave space for legend
+     self.ax.legend(handles=self.legend_elements, 
+                   loc='center left', 
+                   bbox_to_anchor=(1.05, 0.5))
+
+7. Simulation Time Display
+   - Add time display in lower left corner
+   - Update _animation_update:
+     self.ax.text(0.02, 0.02, 
+                  f'Simulation Time: {state.time:.1f}s',
+                  transform=self.ax.transAxes,
+                  fontsize=10,
+                  bbox=dict(facecolor='black', alpha=0.7))
+
+8. Success Indication
+   - Update _plot_drone to use green for successful drones:
+     if drone['status'] == 'successful':
+         marker = 'o'  # Circle for successful drones
+         color = 'green'
+         bubble_color = 'green'  # Change from yellow to green
+         bubble_text_color = 'white'  # Better contrast on green
+
+9. Additional Ideas:
+   - Add completion percentage
+   - Add collision counter
+   - Add average speed indicator
+   - Add mission success/failure ratio
+   - Add elapsed real time vs simulation time
 """
 
 import logging
@@ -36,6 +69,7 @@ from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.animation import FuncAnimation
 
 from ..models.simulation_state import SimulationState
 
@@ -45,11 +79,10 @@ logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 logging.getLogger('PIL.PngImagePlugin').setLevel(logging.ERROR)
 
 # Suppress matplotlib warnings and debug messages
-plt.set_loglevel('warning')  # This is the correct way to set matplotlib's log level
+plt.set_loglevel('warning')
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Set to DEBUG to see all position updates
 
 
 class MatplotlibVisualizer:
@@ -62,23 +95,35 @@ class MatplotlibVisualizer:
             dimensions: (width, length, height) of simulation space
             real_time: If True, updates display in real-time. If False, runs faster
         """
-        plt.style.use('dark_background')  # Better visibility
+        # Setup logging first
+        self.logger = logging.getLogger(__name__)
+        
+        # Initialize counters and flags
+        self.frame_count = 0
+        self.received_first_state = False
+        self.animation_started = False
+        self.state_updates_received = 0
+        self.frames_rendered = 0
+        
+        # Store basic parameters
+        plt.style.use('dark_background')
         self.real_time = real_time
         self.dimensions = dimensions
         
-        # Create figure and axes with wider figure to accommodate legend
-        self.fig = plt.figure(figsize=(14, 8))  # Increased from (12, 8)
+        # Store building patches
+        self.building_patches = []
+        
+        # Create figure and axes
+        self.fig = plt.figure(figsize=(16, 8))
         self.ax = self.fig.add_subplot(111)
+        plt.subplots_adjust(right=0.85)
         
-        # Add more right padding for legend
-        plt.subplots_adjust(right=0.85)  # Adjust right margin for legend
-        
-        # Setup paths and storage
+        # Setup storage
         self.output_dir = Path.cwd() / "output"
         self.output_dir.mkdir(exist_ok=True)
         self.drone_trails = {}
-        self.max_trail_length = 50  # Limit trail memory usage
-        self.current_state = None  # Add this line
+        self.max_trail_length = 50
+        self.current_state = None
         
         # Create legend elements
         self.legend_elements = [
@@ -97,78 +142,152 @@ class MatplotlibVisualizer:
                       markersize=10, label='Destinations')
         ]
         
+        # Setup state management - increase buffer size and add frame skip
+        self.max_buffer_size = 500  # Increased from 100
+        self.frame_skip = 2 if real_time else 1  # Skip frames in real-time mode
+        self.state_buffer = []
+        self.last_state = None
+        
+        # Animation settings - adjust interval based on mode
+        self.animation_interval = 100 if real_time else 1  # Increased from 50ms to 100ms
+        
+        # Add completion callback
+        self.on_simulation_complete = None
+        
+        # Add completion flag
+        self.completion_pending = False
+        self.completion_time = None
+        
+        # Initialize plot
         self.setup_plot()
+        
+        # Initialize animation property
+        self.ani = None
+        
+        # Create animation
+        self.ani = FuncAnimation(
+            self.fig,
+            self._animation_update,
+            interval=self.animation_interval,
+            blit=False,
+            cache_frame_data=False
+        )
+        
+        # Set matplotlib mode
+        if real_time:
+            plt.ion()
+        else:
+            plt.ioff()
+        
+        self.logger.debug("Visualizer initialization complete")
         
     def setup_plot(self) -> None:
         """Initialize plot styling and axes"""
-        # Set bounds with padding
-        padding = 50  # meters
-        self.ax.set_xlim(-padding, self.dimensions[0] + padding)
-        self.ax.set_ylim(-padding, self.dimensions[1] + padding)
-        
-        # Style
-        self.ax.set_title("Drone Flight Simulation", pad=20, fontsize=14)
+        self.logger.debug("Setting up plot...")
+        self.ax.set_xlim(-50, self.dimensions[0] + 50)
+        self.ax.set_ylim(-50, self.dimensions[1] + 50)
         self.ax.grid(True, linestyle='--', alpha=0.3)
-        self.ax.set_xlabel('X Position (m)', fontsize=12)
-        self.ax.set_ylabel('Y Position (m)', fontsize=12)
+        self.ax.set_title("Drone Flight Simulation")
+        self.ax.set_xlabel('X Position (m)')
+        self.ax.set_ylabel('Y Position (m)')
+        self.ax.legend(handles=self.legend_elements, 
+                      loc='center left', 
+                      bbox_to_anchor=(1.05, 0.5))
+        self.logger.debug("Plot setup complete")
         
-        # Add legend
-        self.ax.legend(
-            handles=self.legend_elements,
-            loc='upper right',
-            bbox_to_anchor=(1.15, 1),
-            fontsize=10
-        )
+    def _animation_update(self, frame):
+        """Update function called by animation system"""
+        if not self.animation_started:
+            self.animation_started = True
+            self.logger.info("Animation loop started")
         
-        if self.real_time:
-            plt.ion()
+        self.frame_count += 1
+        self.logger.debug(f"Animation frame {self.frame_count}")
         
-    def on_state_update(self, state: SimulationState) -> None:
-        """Update visualization with new simulation state"""
+        # Verify state availability
+        if not self.state_buffer and not self.last_state:
+            self.logger.warning("No states available for animation")
+            return
+        
+        # Get current state with frame skipping
+        if not self.state_buffer:
+            state = self.last_state
+            self.logger.debug("Using last state (buffer empty)")
+        else:
+            # Skip frames if buffer is getting full
+            skip_count = min(
+                self.frame_skip,
+                len(self.state_buffer) - 1
+            ) if len(self.state_buffer) > self.frame_skip else 0
+            
+            # Pop multiple states but keep the last one
+            for _ in range(skip_count):
+                self.state_buffer.pop(0)
+            
+            state = self.state_buffer.pop(0)
+            self.last_state = state
+        
+        # Verify state data
+        if not state:
+            self.logger.error("Invalid state object")
+            return
+        
+        self.logger.debug(f"State contains: {len(state.drones)} drones, {len(state.buildings)} buildings")
+        
+        # Store current state for use in _plot_drone
         self.current_state = state
         
-        # Clear previous plot elements
+        # Clear and setup
         self.ax.clear()
-        
-        # Log all drone positions and states
-        logger.info(f"""
-            Visualization Update at Time: {state.time:.1f}s
-            ----------------------------------------""")
-        for drone in state.drones:
-            pos = drone['position']
-            vel = drone['velocity']
-            speed = np.linalg.norm(vel)
-            dist_to_dest = np.linalg.norm(np.array(pos) - np.array(drone['destination']))
-            
-            logger.info(f"""
-            Drone {drone['id']}:
-                Position: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})
-                Status: {drone['status']}
-                Speed: {speed:.2f} m/s
-                Distance to destination: {dist_to_dest:.2f}m
-            """)
-        
-        # Plot buildings first (background)
-        self._plot_buildings(state.buildings)
-        
-        # Plot drones and their trails
-        for drone in state.drones:
-            self._update_trails(drone)
-            self._plot_drone(drone)
-        
-        # Plot collision points
-        self._plot_collisions(state.building_collisions)
-        
-        # Update plot settings
         self.setup_plot()
         
-        # Draw and pause if in real-time mode
-        if self.real_time:
-            plt.draw()
-            plt.pause(0.01)  # Small pause to allow for visualization
-        else:
-            plt.draw()
-            plt.pause(0.001)  # Faster updates in fast mode
+        # Add stored building patches
+        for patch in self.building_patches:
+            self.ax.add_patch(patch)
+        
+        # Draw drones with verification
+        for drone in state.drones:
+            try:
+                self.logger.debug(f"Drawing drone {drone['id']} at {drone['position']}")
+                
+                # Verify position data
+                if not all(isinstance(x, (int, float)) for x in drone['position']):
+                    self.logger.error(f"Invalid position data for drone {drone['id']}")
+                    continue
+                
+                # Update and draw trail
+                self._update_trails(drone)
+                
+                # Draw drone and all its components
+                self._plot_drone(drone)
+                
+            except Exception as e:
+                self.logger.error(f"Failed to draw drone {drone['id']}: {e}")
+        
+        # Plot collision points - only show collisions that have happened up to current time
+        current_collisions = [
+            collision for collision in (state.drone_collisions + state.building_collisions)
+            if collision[2] <= state.time  # collision[2] is the collision time
+        ]
+        self._plot_collisions(current_collisions)
+        
+        # Add simulation time display (once per frame)
+        time_text = f'Simulation Time: {state.time:.1f}s'
+        if all(drone['status'] in ['successful', 'collided'] for drone in state.drones):
+            time_text += ' (COMPLETE)'
+            if self.on_simulation_complete:
+                callback = self.on_simulation_complete
+                self.on_simulation_complete = None  # Prevent multiple calls
+                callback(state.time)
+        
+        self.ax.text(0.02, 0.02, 
+                    time_text,
+                    transform=self.ax.transAxes,
+                    fontsize=10,
+                    bbox=dict(facecolor='black', alpha=0.7))
+        
+        self.frames_rendered += 1
+        self.logger.debug(f"Frame {self.frame_count} complete. Total frames rendered: {self.frames_rendered}")
 
     def _update_trails(self, drone: dict) -> None:
         """Update and manage trail for a single drone"""
@@ -197,6 +316,171 @@ class MatplotlibVisualizer:
                     alpha=alpha_values[i],
                     linestyle='--'
                 )
+
+    def on_state_update(self, state: SimulationState) -> None:
+        """Buffer state updates from simulation"""
+        if not self.received_first_state:
+            self.received_first_state = True
+            self.logger.info("Received first state update")
+            self._initialize_building_patches(state.buildings)
+        
+        self.state_updates_received += 1
+        
+        # Skip some updates if buffer is getting full
+        if len(self.state_buffer) > self.max_buffer_size * 0.8:  # 80% full
+            if self.state_updates_received % 3 != 0:  # Skip two out of three updates
+                self.logger.debug("Skipping update due to high buffer usage")
+                return
+        
+        # Add state to buffer
+        if len(self.state_buffer) < self.max_buffer_size:
+            self.state_buffer.append(state)
+            self.logger.debug(f"""
+                State update received:
+                Update #{self.state_updates_received}
+                Time: {state.time:.2f}s
+                Drones: {len(state.drones)}
+                Buildings: {len(state.buildings)}
+                Buffer size: {len(self.state_buffer)}/{self.max_buffer_size}
+            """)
+        else:
+            self.logger.warning(
+                f"State buffer full ({self.max_buffer_size}), dropping update. "
+                f"Consider increasing animation_interval or reducing simulation speed."
+            )
+
+    def _initialize_building_patches(self, buildings) -> None:
+        """Create building patches once during initialization"""
+        self.logger.debug("Initializing building patches...")
+        self.building_patches = []
+        
+        for i, building in enumerate(buildings):
+            try:
+                rect = plt.Rectangle(
+                    (building.x - building.width/2,
+                     building.y - building.length/2),
+                    building.width,
+                    building.length,
+                    color='gray',
+                    alpha=0.5,
+                    zorder=1
+                )
+                self.building_patches.append(rect)
+            except Exception as e:
+                self.logger.error(f"Failed to create building patch {i}: {e}", exc_info=True)
+        
+        self.logger.debug(f"Created {len(self.building_patches)} building patches")
+
+    def _plot_collisions(self, collisions: List[Tuple]) -> None:
+        """Plot collision points with warning indicators"""
+        if not collisions:
+            return
+            
+        # Plot each collision point that has occurred
+        for collision in collisions:
+            # Building collisions have 6 elements (drone_id, building_id, time, x, y, z)
+            # Drone collisions have 3 elements (drone1_id, drone2_id, time)
+            if len(collision) == 6:  # Building collision
+                x, y = collision[3], collision[4]  # Get collision coordinates
+                color = 'orange'  # Different color for building collisions
+                collision_time = collision[2]
+            else:  # Drone collision
+                drone1 = next(d for d in self.current_state.drones if d['id'] == collision[0])
+                x, y = drone1['position'][0], drone1['position'][1]
+                color = 'red'
+                collision_time = collision[2]
+            
+            # Plot collision marker
+            self.ax.scatter(
+                x, y,
+                c=color,
+                marker='x',
+                s=100,
+                zorder=3  # Ensure visible above other elements
+            )
+            
+            # Add warning circle
+            warning_circle = plt.Circle(
+                (x, y),
+                radius=10,  # 10m radius
+                color=color,
+                fill=False,
+                alpha=0.3,
+                linestyle=':',
+                zorder=2
+            )
+            self.ax.add_patch(warning_circle)
+            
+            # Add collision time label
+            self.ax.text(
+                x, y - 15,
+                f'Collision at {collision_time:.1f}s',
+                color=color,
+                fontsize=8,
+                ha='center'
+            )
+
+    def stop_animation(self):
+        """Properly stop the animation"""
+        # Don't try to stop the animation - just let it run
+        pass
+
+    def save_plot(self, filename: str = "final_state.png") -> None:
+        """Save current plot state to file"""
+        try:
+            # Make sure we have a valid figure before saving
+            if not plt.fignum_exists(self.fig.number):
+                self.logger.error("Cannot save plot: Figure no longer exists")
+                return
+                
+            # Force a redraw of the figure
+            self.fig.canvas.draw()
+            
+            # Save the figure
+            save_path = self.output_dir / filename
+            self.fig.savefig(save_path)
+            print(f"\nFinal state saved to: {save_path}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save plot: {e}", exc_info=True)
+
+    def _calculate_time_to_closest_approach(
+        self, 
+        pos1: List[float], 
+        vel1: List[float], 
+        pos2: List[float], 
+        vel2: List[float]
+    ) -> float:
+        """Calculate time until closest approach between two drones
+        
+        Args:
+            pos1: Position vector of first drone [x,y,z]
+            vel1: Velocity vector of first drone [vx,vy,vz]
+            pos2: Position vector of second drone [x,y,z]
+            vel2: Velocity vector of second drone [vx,vy,vz]
+            
+        Returns:
+            Time (in seconds) until closest approach, or None if drones are moving apart
+        """
+        pos1 = np.array(pos1)
+        pos2 = np.array(pos2)
+        vel1 = np.array(vel1)
+        vel2 = np.array(vel2)
+        
+        # Calculate relative position and velocity
+        rel_pos = pos1 - pos2
+        rel_vel = vel1 - vel2
+        
+        # If relative speed is zero, return None
+        if np.allclose(rel_vel, 0):
+            return None
+            
+        # Calculate time to closest approach
+        # This is when relative position dot relative velocity = 0
+        t = -np.dot(rel_pos, rel_vel) / np.dot(rel_vel, rel_vel)
+        
+        # Only return positive times (future collisions)
+        return t if t > 0 else None 
 
     def _plot_drone(self, drone: dict) -> None:
         """Plot a single drone with its info bubble and waypoints"""
@@ -236,8 +520,8 @@ class MatplotlibVisualizer:
         elif drone['status'] == 'successful':
             marker = 'o'  # Circle for successful drones
             color = 'green'
-            bubble_color = 'yellow'
-            bubble_text_color = 'black'
+            bubble_color = 'green'
+            bubble_text_color = 'white'
         else:
             marker = '*'  # Star for active drones
             color = 'green'
@@ -301,97 +585,6 @@ class MatplotlibVisualizer:
             color=bubble_text_color
         )
 
-    def _plot_buildings(self, buildings: List[dict]) -> None:
-        """Plot buildings as semi-transparent rectangles
-        
-        Args:
-            buildings: List of building dictionaries with position and dimensions
-        """
-        for building in buildings:
-            pos = building['position']
-            dims = building['dimensions']
-            
-            # Create rectangle patch
-            rect = plt.Rectangle(
-                (pos[0] - dims[0]/2, pos[1] - dims[1]/2),  # Bottom left corner
-                dims[0], dims[1],  # Width and length
-                color='gray',
-                alpha=0.5,
-                zorder=1  # Ensure buildings are behind drones
-            )
-            
-            self.ax.add_patch(rect)
-
-    def _plot_collisions(self, collisions: List[Tuple]) -> None:
-        """Plot collision points with warning indicators"""
-        if not collisions:
-            return
-            
-        # Plot each collision point
-        for collision in collisions:
-            x, y = collision[3], collision[4]  # Get collision coordinates
-            
-            # Plot collision marker
-            self.ax.scatter(
-                x, y,
-                c='yellow',
-                marker='x',
-                s=100,
-                zorder=3  # Ensure visible above other elements
-            )
-            
-            # Add warning circle
-            warning_circle = plt.Circle(
-                (x, y),
-                radius=10,  # 10m radius
-                color='yellow',
-                fill=False,
-                alpha=0.3,
-                linestyle=':',
-                zorder=2
-            )
-            self.ax.add_patch(warning_circle)
-
-    def save_plot(self, filename: str = "final_state.png") -> None:
-        """Save current plot state to file"""
-        save_path = self.output_dir / filename
-        self.fig.savefig(save_path)
-        print(f"\nFinal state saved to: {save_path}")
-
-    def _calculate_time_to_closest_approach(
-        self, 
-        pos1: List[float], 
-        vel1: List[float], 
-        pos2: List[float], 
-        vel2: List[float]
-    ) -> float:
-        """Calculate time until closest approach between two drones
-        
-        Args:
-            pos1: Position vector of first drone [x,y,z]
-            vel1: Velocity vector of first drone [vx,vy,vz]
-            pos2: Position vector of second drone [x,y,z]
-            vel2: Velocity vector of second drone [vx,vy,vz]
-            
-        Returns:
-            Time (in seconds) until closest approach, or None if drones are moving apart
-        """
-        pos1 = np.array(pos1)
-        pos2 = np.array(pos2)
-        vel1 = np.array(vel1)
-        vel2 = np.array(vel2)
-        
-        # Calculate relative position and velocity
-        rel_pos = pos1 - pos2
-        rel_vel = vel1 - vel2
-        
-        # If relative speed is zero, return None
-        if np.allclose(rel_vel, 0):
-            return None
-            
-        # Calculate time to closest approach
-        # This is when relative position dot relative velocity = 0
-        t = -np.dot(rel_pos, rel_vel) / np.dot(rel_vel, rel_vel)
-        
-        # Only return positive times (future collisions)
-        return t if t > 0 else None 
+    def register_completion_callback(self, callback):
+        """Register a callback to be called when simulation completes"""
+        self.on_simulation_complete = callback 

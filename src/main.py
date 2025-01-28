@@ -1,65 +1,72 @@
 import argparse
 import logging
+import threading
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 
 from .services.simulation import SimulationEngine
 
-def setup_logging(debug: bool = True):
-    """Configure logging for the entire application"""
-    log_level = logging.DEBUG if debug else logging.INFO
+
+def setup_logging(debug_mode=False):
+    """Configure logging levels for all modules"""
+    # Set default level for all loggers
+    logging.getLogger().setLevel(logging.WARNING)
     
-    # Configure the root logger
-    logging.basicConfig(
-        level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%H:%M:%S'
-    )
+    # Configure specific loggers
+    loggers = {
+        'src.models.drone': logging.WARNING,
+        'src.services.simulation': logging.WARNING,
+        'src.visualization.matplotlib_visualizer': logging.WARNING,
+        'matplotlib': logging.ERROR,
+        'matplotlib.font_manager': logging.ERROR,
+        'PIL.PngImagePlugin': logging.ERROR
+    }
     
-    # Suppress matplotlib and PIL debug logs regardless of debug setting
-    logging.getLogger('matplotlib').setLevel(logging.WARNING)
-    logging.getLogger('PIL').setLevel(logging.WARNING)
+    if debug_mode:
+        # Override with DEBUG level if debug mode is enabled
+        debug_loggers = ['src.models.drone', 'src.services.simulation', 'src.visualization.matplotlib_visualizer']
+        for logger_name in debug_loggers:
+            loggers[logger_name] = logging.DEBUG
+    
+    # Apply configuration
+    for logger_name, level in loggers.items():
+        logging.getLogger(logger_name).setLevel(level)
+
 
 def main(config_path: str, real_time: bool = True):
-    # Setup logging first
-    setup_logging(debug=True)  # Set to True to see all debug messages
-    
-    # Convert relative path to absolute path
+    setup_logging(debug_mode=False)
     config_path = Path.cwd() / config_path
     
-    # Debug prints
-    logger = logging.getLogger(__name__)
-    logger.debug(f"Config path: {config_path}")
-    logger.debug(f"Working directory: {Path.cwd()}")
-    
+    # Create engine with visualization setup
     engine = SimulationEngine(
         str(config_path),
         str(Path.cwd() / "data/drones/drone_models.json"),
         str(Path.cwd() / "data/cities/cities-data.json"),
-        real_time=real_time  # Pass real_time flag
+        real_time=real_time
     )
-
     engine.initialize_simulation()
     
     try:
         print(f"Running simulation in {'real-time' if real_time else 'fast'} mode...")
-        engine.run()
         
-        if real_time:
-            print("\nSimulation complete. Close the visualization window to exit.")
-            plt.show()  # This will block until user closes the window
+        # Show visualization window first
+        plt.show(block=False)  # Non-blocking show to setup window
+        
+        if not real_time:
+            sim_thread = threading.Thread(target=engine.run)
+            sim_thread.start()
         else:
-            print("\nSimulation complete. Visualization will remain open for 30 seconds...")
-            plt.show(block=False)
-            plt.pause(30)  # Keep window open longer to see final state
-        
-        print(engine.generate_report())
+            engine.run()
+            
+        # Now block until window is closed
+        plt.show(block=True)
         
     except KeyboardInterrupt:
         print("\nSimulation interrupted by user")
     finally:
-        plt.close('all')  # Clean up matplotlib windows
+        plt.close('all')
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
