@@ -51,17 +51,7 @@ def load_simulation_config(path: str) -> dict:
 def load_drone_models(path: str) -> Dict[str, DroneModel]:
     with open(path) as f:
         data = json.load(f)
-        return {
-            name: DroneModel(
-                max_speed=model['max_speed_m_s'],
-                range=model['range_km'] * 1000,  # Convert km to meters
-                dimensions={
-                    'length': model['dimensions_m'][0],
-                    'width': model['dimensions_m'][1],
-                    'height': model['dimensions_m'][2]
-                },
-                payload_capacity=model['payload_capacity_kg'],
-                battery_life=model['battery_life_hours']
-            )
-            for name, model in data['drone_models'].items()
-        }
+    return {
+        name: DroneModel(model_data)
+        for name, model_data in data['drone_models'].items()
+    }

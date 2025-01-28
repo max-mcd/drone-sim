@@ -1,64 +1,60 @@
-from dataclasses import dataclass
-from typing import Dict
+import logging
 
 import numpy as np
 
+from .drone_model import DroneModel  # Import DroneModel from correct file
 
-@dataclass
-class DroneModel:
-    max_speed: float
-    range: float
-    dimensions: Dict[str, float]
-    payload_capacity: float
-    battery_life: float
+logger = logging.getLogger(__name__)
+
 
 class Drone:
     def __init__(self, id: int, model: DroneModel, start_pos: np.ndarray, destination: np.ndarray):
         self.id = id
         self.model = model
-        self.position = start_pos
+        self.position = start_pos.copy()  # Current position
+        self.start_pos = start_pos.copy()  # Store initial position
         self.destination = destination
         self.velocity = np.zeros(3)
         self.battery_remaining = model.battery_life * 3600  # Convert to seconds
         self.successful = False
         self.travel_time = 0.0
+        self.logger = logging.getLogger(__name__)
+        # Set logging level to INFO or higher to suppress debug messages
+        self.logger.setLevel(logging.INFO) # TODO: Change to DEBUG for more detailed logging
 
     def update(self, dt: float) -> bool:
-        """
-        Updates the drone's position and battery status for the given time step.
-        
-        Args:
-            dt (float): Time step in seconds
-            
-        Returns:
-            bool: True if drone is still operational, False if battery depleted
-        """
-        if self.battery_remaining <= 0:
+        """Update drone position and state"""
+        if self.successful:
             return False
-
-        # This block updates the drone's position and velocity:
-        # 1. Calculates direction vector to destination
-        # 2. Gets distance to destination
-        # 3. Normalizes direction vector if distance > 0
-        # 4. Sets velocity based on max speed or required speed to reach destination
-        # 5. Updates position based on velocity and time step
-        # 6. Decrements remaining battery time
-
-        direction = self.destination - self.position
-        distance = np.linalg.norm(direction)
+            
+        # Calculate vector to destination
+        to_destination = self.destination - self.position
+        distance = np.linalg.norm(to_destination)
         
-        if distance > 0:
-            direction = direction / distance # Normalize direction vector   
-            speed = min(self.model.max_speed, distance / dt) 
-            self.velocity = direction * speed
-            self.position += self.velocity * dt
-            self.battery_remaining -= dt
-                
-        # Update travel time
+        if distance < 1.0:  # Within 1m counts as arrived
+            self.successful = True
+            self.velocity = np.zeros(3)
+            return False
+            
+        # Update velocity (normalized direction * max_speed)
+        direction = to_destination / distance
+        self.velocity = direction * self.model.max_speed
+        
+        # Update position
+        self.position += self.velocity * dt
         self.travel_time += dt
         
-        # Check if destination reached
-        if np.allclose(self.position, self.destination, rtol=1e-05, atol=1e-05):
-            self.successful = True
-            
+        # Debug logging
+        logger.debug(f"""
+            Drone {self.id} update:
+            Model: {self.__class__.__name__}
+            Max speed from model: {self.model.max_speed} m/s
+            Raw direction vector: {to_destination}
+            Normalized direction: {direction}
+            Calculated velocity: {self.velocity}
+            Actual speed: {np.linalg.norm(self.velocity)} m/s
+            Position: {self.position}
+            Destination: {self.destination}
+        """)
+        
         return True

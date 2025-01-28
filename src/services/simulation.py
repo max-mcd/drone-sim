@@ -1,16 +1,22 @@
+import logging
 from typing import List, Tuple
 
 import numpy as np
 
 from ..models.drone import Drone
+from ..models.simulation_state import SimulationState
+from ..services.state_manager import SimulationStateManager
 from ..utils.config_loader import (
     load_city_data,
     load_drone_models,
     load_simulation_config,
 )
 from ..utils.report_generator import ReportGenerator
+from ..visualization.matplotlib_visualizer import MatplotlibVisualizer
 from .collision_detector import CollisionDetector
 from .environment import Environment
+
+logger = logging.getLogger(__name__)
 
 
 class SimulationEngine:
@@ -28,7 +34,7 @@ class SimulationEngine:
     completed their routes. During each time step, drone positions are updated and checked
     for potential collisions with other drones or buildings in the environment.
     """
-    def __init__(self, config_path: str, drone_data_path: str, city_data_path: str):
+    def __init__(self, config_path: str, drone_data_path: str, city_data_path: str, real_time: bool = True):
         self.config = load_simulation_config(config_path)
         self.drone_models = load_drone_models(drone_data_path)
         
@@ -51,6 +57,20 @@ class SimulationEngine:
         self.drone_collisions: List[Tuple[int, int, float]] = []
         self.building_collisions: List[Tuple[int, int, float, float, float, float]] = []
         self.time = 0.0
+        
+        self.state_manager = SimulationStateManager()
+        
+        # Create and register visualizer
+        dimensions = (
+            self.config['simulation']['dimensions']['x'],
+            self.config['simulation']['dimensions']['y'],
+            self.config['simulation']['dimensions']['z']
+        )
+        self.visualizer = MatplotlibVisualizer(dimensions, real_time=real_time)
+        self.state_manager.add_observer(self.visualizer.on_state_update)
+        self.logger = logging.getLogger(__name__)
+        # Set logging level to INFO or higher to suppress debug messages
+        self.logger.setLevel(logging.INFO) # TODO: Change to DEBUG for more detailed logging
 
     def initialize_simulation(self) -> None:
         # City is already initialized in __init__
@@ -82,6 +102,27 @@ class SimulationEngine:
             ])
             self.drones.append(Drone(len(self.drones), model, start_pos, destination))
 
+    def _update_state(self) -> None:
+        """Create and update current simulation state"""
+        new_state = SimulationState(
+            time=self.time,
+            drones=[{
+                'id': d.id,
+                'position': d.position.tolist(),
+                'velocity': d.velocity.tolist(),
+                'start_pos': d.start_pos.tolist(),
+                'destination': d.destination.tolist(),
+                'successful': d.successful
+            } for d in self.drones],
+            buildings=[{
+                'position': [b.x, b.y],
+                'dimensions': [b.width, b.length, b.height]
+            } for b in self.environment.current_city.buildings],
+            drone_collisions=self.drone_collisions,
+            building_collisions=self.building_collisions
+        )
+        self.state_manager.update_state(new_state)
+
     def run(self) -> None:
         """
         Run the simulation for the configured duration.
@@ -101,12 +142,47 @@ class SimulationEngine:
         duration = self.config['simulation']['duration']
 
         while self.time < duration:
+            # Calculate and log maximum possible position change
+            for drone in self.drones:
+                speed = np.linalg.norm(drone.velocity)
+                max_distance = speed * dt
+                if speed > 0:
+                    logger.debug(f"""
+                        Drone {drone.id} movement:
+                        Speed: {speed:.1f} m/s
+                        Distance per timestep: {max_distance:.1f}m
+                        Position: {drone.position}
+                        Time: {self.time:.1f}s
+                    """)
+                
+                # Check if timestep might cause collision misses
+                for other in self.drones:
+                    if other.id != drone.id:
+                        rel_speed = np.linalg.norm(drone.velocity - other.velocity)
+                        if rel_speed * dt > CollisionDetector.COLLISION_THRESHOLD:
+                            logger.warning(f"""
+                                Potential collision miss risk:
+                                Drones {drone.id} and {other.id}
+                                Relative speed: {rel_speed:.1f} m/s
+                                Distance covered in timestep: {rel_speed * dt:.1f}m
+                                Collision threshold: {CollisionDetector.COLLISION_THRESHOLD}m
+                            """)
+            
+            # Update drone positions
             for drone in self.drones:
                 if not drone.update(dt):
                     continue
 
+            # Check for collisions
             self._check_all_collisions()
+            
+            # Update state and visualization
+            self._update_state()
+            
             self.time += dt
+
+        # Save final state
+        self.visualizer.save_plot()
 
     def _check_all_collisions(self) -> None:
         """

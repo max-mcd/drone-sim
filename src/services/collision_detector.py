@@ -1,8 +1,13 @@
+import logging
+
 import numpy as np
 
 from ..models.building import Building
 from ..models.drone import Drone
 
+# Configure collision detector logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)  # Change from DEBUG to INFO to suppress these messages
 
 class CollisionDetector:
     """
@@ -15,6 +20,8 @@ class CollisionDetector:
     The collision detection uses simplified rectangular bounds checking rather than complex 
     3D geometry to maintain performance while providing reasonable accuracy for the simulation.
     """
+
+    COLLISION_THRESHOLD = 10.0  # meters
     @staticmethod
     def check_drone_collision(drone1: Drone, drone2: Drone) -> bool:
         """
@@ -31,21 +38,22 @@ class CollisionDetector:
         Returns:
             bool: True if drones have collided (are closer than min safe distance), False otherwise
         """
-        # Calculate radius for each drone (half of largest dimension)
-        radius1 = max(
-            drone1.model.dimensions['length'],
-            drone1.model.dimensions['width']
-        ) / 2
+
+        pos1 = drone1.position
+        pos2 = drone2.position
+        distance = np.linalg.norm(pos1 - pos2)
         
-        radius2 = max(
-            drone2.model.dimensions['length'],
-            drone2.model.dimensions['width']
-        ) / 2
-        
-        # Minimum safe distance is sum of both radii
-        min_distance = radius1 + radius2
-        
-        return np.linalg.norm(drone1.position - drone2.position) < min_distance
+        # Debug log when drones are getting close
+        if distance < 50.0:  # Log when within 50m
+            logger.debug(f"""
+                Checking collision:
+                Drone {drone1.id} at {pos1} (speed: {np.linalg.norm(drone1.velocity):.1f} m/s)
+                Drone {drone2.id} at {pos2} (speed: {np.linalg.norm(drone2.velocity):.1f} m/s)
+                Distance: {distance:.1f}m
+                Time: {drone1.travel_time:.1f}s
+            """)
+
+        return distance < CollisionDetector.COLLISION_THRESHOLD
 
     @staticmethod
     def check_building_collision(drone: Drone, building: Building) -> bool:

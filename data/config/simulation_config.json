@@ -1,6 +1,6 @@
 {
     "simulation": {
-        "time_step": 0.5,
+        "time_step": 0.1,
         "duration": 120.0,
         "city": "Metroville",
         "dimensions": {
@@ -12,18 +12,28 @@
     "drones": [
         {
             "model": "Falcon-X",
-            "start": [0.0, 0.0, 10.0],
-            "destination": [100.0, 100.0, 50.0]
+            "start": [0.0, 0.0, 60.0],
+            "destination": [200.0, 200.0, 60.0]
         },
         {
             "model": "Falcon-X",
-            "start": [200.0, 200.0, 10.0],
-            "destination": [0.0, 0.0, 50.0]
+            "start": [200.0, 1800.0, 60.0],
+            "destination": [1400.0, 400.0, 60.0]
         },
         {
             "model": "HawkEye",
             "start": [500.0, 500.0, 100.0],
             "destination": [800.0, 800.0, 150.0]
+        },
+        {
+            "model": "AeroScout",
+            "start": [1800.0, 1800.0, 100.0],
+            "destination": [1300.0, 1300.0, 100.0]
+        },
+        {
+            "model": "Deliverance",
+            "start": [1300.0, 1300.0, 100.0],
+            "destination": [1800.0, 1800.0, 100.0]
         }
     ]
 } 
