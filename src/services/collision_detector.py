@@ -7,7 +7,7 @@ from ..models.drone import Drone
 
 # Configure collision detector logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)  # Change from DEBUG to INFO to suppress these messages
+logger.setLevel(logging.DEBUG)  # Change from DEBUG to INFO to suppress these messages
 
 class CollisionDetector:
     """
@@ -24,20 +24,10 @@ class CollisionDetector:
     COLLISION_THRESHOLD = 10.0  # meters
     @staticmethod
     def check_drone_collision(drone1: Drone, drone2: Drone) -> bool:
-        """
-        Checks if two drones have collided by comparing their positions and dimensions.
-        
-        Uses a simplified collision detection approach where each drone is treated as a sphere
-        with radius equal to half of its largest dimension. A collision occurs if the distance 
-        between drone centers is less than the sum of their radii.
-        
-        Args:
-            drone1: First drone to check for collision
-            drone2: Second drone to check for collision
-            
-        Returns:
-            bool: True if drones have collided (are closer than min safe distance), False otherwise
-        """
+        """Check for collision between two drones"""
+        # Skip if either drone has already collided
+        if drone1.status == 'collided' or drone2.status == 'collided':
+            return False
 
         pos1 = drone1.position
         pos2 = drone2.position
@@ -45,30 +35,22 @@ class CollisionDetector:
         
         # Debug log when drones are getting close
         if distance < 50.0:  # Log when within 50m
-            logger.debug(f"""
-                Checking collision:
-                Drone {drone1.id} at {pos1} (speed: {np.linalg.norm(drone1.velocity):.1f} m/s)
-                Drone {drone2.id} at {pos2} (speed: {np.linalg.norm(drone2.velocity):.1f} m/s)
-                Distance: {distance:.1f}m
-                Time: {drone1.travel_time:.1f}s
+            logger.info(f"""
+                Checking potential collision:
+                Drone {drone1.id} at {pos1} (status: {drone1.status})
+                Drone {drone2.id} at {pos2} (status: {drone2.status})
+                Distance between drones: {distance:.1f}m
             """)
 
         return distance < CollisionDetector.COLLISION_THRESHOLD
 
     @staticmethod
     def check_building_collision(drone: Drone, building: Building) -> bool:
-        """
-        Check if a drone has collided with a building by testing if any part of the drone
-        intersects with the building's 3D bounds. The collision bounds are expanded by
-        half of the drone's dimensions in each direction.
-
-        Args:
-            drone: The drone object to check for collision
-            building: The building object to check for collision with
-
-        Returns:
-            bool: True if the drone intersects with the building bounds, False otherwise
-        """
+        """Check for collision between drone and building"""
+        # Skip if drone has already collided
+        if drone.status == 'collided':
+            return False
+            
         drone_pos = drone.position
         
         # Get half dimensions of drone for expanding building bounds

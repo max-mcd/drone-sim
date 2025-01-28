@@ -34,7 +34,6 @@ import logging
 from pathlib import Path
 from typing import List, Tuple
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -47,6 +46,10 @@ logging.getLogger('PIL.PngImagePlugin').setLevel(logging.ERROR)
 
 # Suppress matplotlib warnings and debug messages
 plt.set_loglevel('warning')  # This is the correct way to set matplotlib's log level
+
+# Initialize logger for this module
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # Set to DEBUG to see all position updates
 
 
 class MatplotlibVisualizer:
@@ -79,16 +82,18 @@ class MatplotlibVisualizer:
         
         # Create legend elements
         self.legend_elements = [
+            plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='green',
+                      markersize=10, label='Active Drones'),
             plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='red',
-                      markersize=10, label='Drones'),
+                      markersize=10, label='Collided Drones'),
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='green',
+                      markersize=10, label='Successful Drones'),
             plt.Rectangle((0,0), 1, 1, fc='gray', alpha=0.5, label='Buildings'),
-            plt.Line2D([0], [0], marker='x', color='yellow',
-                      markersize=10, label='Collisions'),
             plt.Line2D([0], [0], color='lightblue', linestyle='--',
                       label='Drone Trail'),
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='blue',
                       markersize=10, label='Start Points'),
-            plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='green',
+            plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='yellow',
                       markersize=10, label='Destinations')
         ]
         
@@ -120,32 +125,50 @@ class MatplotlibVisualizer:
         
     def on_state_update(self, state: SimulationState) -> None:
         """Update visualization with new simulation state"""
-        # Store current state
-        self.current_state = state  # Add this line
+        self.current_state = state
         
-        # In fast mode, only update periodically
-        if not self.real_time and int(state.time / 0.5) % 10 != 0:
-            return
-            
+        # Clear previous plot elements
         self.ax.clear()
-        self.setup_plot()  # Reapply styling
         
-        # Update all elements
+        # Log all drone positions and states
+        logger.info(f"""
+            Visualization Update at Time: {state.time:.1f}s
+            ----------------------------------------""")
+        for drone in state.drones:
+            pos = drone['position']
+            vel = drone['velocity']
+            speed = np.linalg.norm(vel)
+            dist_to_dest = np.linalg.norm(np.array(pos) - np.array(drone['destination']))
+            
+            logger.info(f"""
+            Drone {drone['id']}:
+                Position: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})
+                Status: {drone['status']}
+                Speed: {speed:.2f} m/s
+                Distance to destination: {dist_to_dest:.2f}m
+            """)
+        
+        # Plot buildings first (background)
+        self._plot_buildings(state.buildings)
+        
+        # Plot drones and their trails
         for drone in state.drones:
             self._update_trails(drone)
             self._plot_drone(drone)
-            
-        # Plot buildings and collisions
-        self._plot_buildings(state.buildings)
+        
+        # Plot collision points
         self._plot_collisions(state.building_collisions)
         
-        # Update display
+        # Update plot settings
+        self.setup_plot()
+        
+        # Draw and pause if in real-time mode
         if self.real_time:
             plt.draw()
-            plt.pause(0.01)
+            plt.pause(0.01)  # Small pause to allow for visualization
         else:
             plt.draw()
-            plt.pause(0.001)
+            plt.pause(0.001)  # Faster updates in fast mode
 
     def _update_trails(self, drone: dict) -> None:
         """Update and manage trail for a single drone"""
@@ -181,23 +204,50 @@ class MatplotlibVisualizer:
         vel = drone['velocity']
         speed = np.linalg.norm(vel)
         
+        # Detailed position logging for Drone 2
+        if drone['id'] == 2:
+            logger.info(f"""
+                Visualization update for Drone 2:
+                Time: {self.current_state.time:.1f}s
+                Position: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})
+                Status: {drone['status']}
+                Speed: {speed:.2f} m/s
+                Distance to destination: {np.linalg.norm(np.array(pos) - np.array(drone['destination'])):.2f}m
+            """)
+        
         # Plot start point (blue circle)
         self.ax.scatter(
             drone['start_pos'][0], drone['start_pos'][1],
             c='blue', marker='o', s=100, zorder=2
         )
         
-        # Plot destination (green star if reached, yellow if not)
-        dest_color = 'green' if drone['successful'] else 'yellow'
+        # Plot destination (yellow star)
         self.ax.scatter(
             drone['destination'][0], drone['destination'][1],
-            c=dest_color, marker='*', s=100, zorder=2
+            c='yellow', marker='*', s=100, zorder=2
         )
         
-        # Plot current drone position (red star)
+        # Determine drone marker and color based on status
+        if drone['status'] == 'collided':
+            marker = '*'  # Star for collided drones
+            color = 'red'
+            bubble_color = 'red'
+            bubble_text_color = 'white'
+        elif drone['status'] == 'successful':
+            marker = 'o'  # Circle for successful drones
+            color = 'green'
+            bubble_color = 'yellow'
+            bubble_text_color = 'black'
+        else:
+            marker = '*'  # Star for active drones
+            color = 'green'
+            bubble_color = 'yellow'
+            bubble_text_color = 'black'
+        
+        # Plot current drone position
         self.ax.scatter(
             pos[0], pos[1],
-            c='red', marker='*', s=100, zorder=3
+            c=color, marker=marker, s=100, zorder=3
         )
         
         # Add collision detection radius visualization
@@ -231,7 +281,7 @@ class MatplotlibVisualizer:
                                 color='yellow'
                             )
         
-        # Add info bubble with black text
+        # Add info bubble with color based on status
         info_text = (
             f"ID: {drone['id']}\n"
             f"Speed: {speed:.1f} m/s\n"
@@ -244,11 +294,11 @@ class MatplotlibVisualizer:
             textcoords='offset points',
             bbox=dict(
                 boxstyle='round,pad=0.5',
-                fc='yellow',
+                fc=bubble_color,
                 alpha=0.7
             ),
             fontsize=8,
-            color='black'
+            color=bubble_text_color
         )
 
     def _plot_buildings(self, buildings: List[dict]) -> None:

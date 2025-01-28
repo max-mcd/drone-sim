@@ -1,5 +1,6 @@
 import logging
 from typing import List, Tuple
+import time
 
 import numpy as np
 
@@ -37,6 +38,7 @@ class SimulationEngine:
     def __init__(self, config_path: str, drone_data_path: str, city_data_path: str, real_time: bool = True):
         self.config = load_simulation_config(config_path)
         self.drone_models = load_drone_models(drone_data_path)
+        self.real_time = real_time  # Keep this as we need it
         
         # Load city data first
         self.city_data = load_city_data(city_data_path, self.config['simulation']['city'])
@@ -70,7 +72,7 @@ class SimulationEngine:
         self.state_manager.add_observer(self.visualizer.on_state_update)
         self.logger = logging.getLogger(__name__)
         # Set logging level to INFO or higher to suppress debug messages
-        self.logger.setLevel(logging.INFO) # TODO: Change to DEBUG for more detailed logging
+        self.logger.setLevel(logging.DEBUG) # TODO: Change to DEBUG for more detailed logging
 
     def initialize_simulation(self) -> None:
         # City is already initialized in __init__
@@ -112,7 +114,8 @@ class SimulationEngine:
                 'velocity': d.velocity.tolist(),
                 'start_pos': d.start_pos.tolist(),
                 'destination': d.destination.tolist(),
-                'successful': d.successful
+                'successful': d.successful,
+                'status': d.status
             } for d in self.drones],
             buildings=[{
                 'position': [b.x, b.y],
@@ -130,7 +133,7 @@ class SimulationEngine:
         Executes the simulation loop, updating drone positions and checking for collisions
         at each time step. The simulation continues until either:
         - The configured duration is reached
-        - All drones have completed their routes
+        - All drones have completed their routes or collided
         
         During each time step:
         1. Updates position and state of each active drone
@@ -169,16 +172,39 @@ class SimulationEngine:
                             """)
             
             # Update drone positions
+            state_changes = False
             for drone in self.drones:
-                if not drone.update(dt):
-                    continue
+                if drone.update(dt):
+                    state_changes = True
 
             # Check for collisions
             self._check_all_collisions()
             
-            # Update state and visualization
-            self._update_state()
+            # Update state and visualization if there were changes
+            if state_changes:
+                self._update_state()
             
+            # Check if all drones are in terminal state
+            drone_states = [(drone.id, drone.status) for drone in self.drones]
+            all_drones_finished = all(
+                drone.status == 'collided' or drone.status == 'successful'
+                for drone in self.drones
+            )
+            
+            if all_drones_finished:
+                # Always ensure final state is visualized
+                self._update_state()
+                status_summary = "\n".join(
+                    f"Drone {id}: {status}" 
+                    for id, status in drone_states
+                )
+                logger.info(f"""Simulation ended early - all drones have finished:
+{status_summary}""")
+                # Add a small delay to ensure final state is rendered
+                if not self.real_time:
+                    time.sleep(0.1)
+                break
+
             self.time += dt
 
         # Save final state
@@ -188,23 +214,67 @@ class SimulationEngine:
         """
         Check for all possible collisions in the current simulation state.
         
-        Performs two types of collision checks:
+        Uses a triangular comparison pattern to efficiently check drone-to-drone collisions:
+        - Drone 0 checks against: 1, 2, 3, ..., n-1
+        - Drone 1 checks against: 2, 3, ..., n-1
+        - Drone 2 checks against: 3, ..., n-1
+        And so on...
+
+        This approach:
+        1. Avoids redundant checks (if we checked 1 vs 0, we don't need to check 0 vs 1)
+        2. Breaks early when a collision is found
+        3. Skips already collided drones
+        
+        Total comparisons in worst case (no collisions): n(n-1)/2
+        where n is the number of drones.
+
+        The method performs two types of collision checks:
         1. Drone-to-drone collisions between all pairs of drones
         2. Drone-to-building collisions between each drone and all buildings
         
-        When collisions are detected, they are recorded in the simulation's collision lists:
+        When collisions are detected:
+        - Drones are marked as 'collided' and stop moving
+        - Collisions are recorded with timestamp and coordinates
         - Drone collisions: (drone1_id, drone2_id, time)
         - Building collisions: (drone_id, building_id, time, x, y, z)
         """
         for i in range(len(self.drones)):
+            drone = self.drones[i]
+            old_status = drone.status
+            
+            # Skip if drone has already collided
+            if drone.status == 'collided':
+                continue
+                
             for j in range(i + 1, len(self.drones)):
-                if CollisionDetector.check_drone_collision(self.drones[i], self.drones[j]):
+                # Skip if other drone has already collided
+                if self.drones[j].status == 'collided':
+                    continue
+                    
+                if CollisionDetector.check_drone_collision(drone, self.drones[j]):
                     self.drone_collisions.append((i, j, self.time))
+                    # Mark both drones as collided
+                    self.drones[i].status = 'collided'
+                    self.drones[j].status = 'collided'
+                    break  # Stop checking this drone against others
 
-            for j, building in enumerate(self.environment.current_city.buildings):
-                if CollisionDetector.check_building_collision(self.drones[i], building):
-                    pos = self.drones[i].position
-                    self.building_collisions.append((i, j, self.time, pos[0], pos[1], pos[2]))
+            # Only check building collisions if drone hasn't collided with another drone
+            if drone.status != 'collided':
+                for j, building in enumerate(self.environment.current_city.buildings):
+                    if CollisionDetector.check_building_collision(drone, building):
+                        pos = drone.position
+                        self.building_collisions.append((i, j, self.time, pos[0], pos[1], pos[2]))
+                        drone.status = 'collided'
+                        break  # Stop checking this drone against other buildings
+
+            if drone.status != old_status:
+                logger.info(f"""
+                    Drone {drone.id} status changed:
+                    From: {old_status}
+                    To: {drone.status}
+                    Position: {drone.position}
+                    Time: {self.time:.1f}s
+                """)
 
     def _count_successful_flights(self) -> int:
         return sum(1 for drone in self.drones if drone.successful)

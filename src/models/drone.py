@@ -18,23 +18,43 @@ class Drone:
         self.battery_remaining = model.battery_life * 3600  # Convert to seconds
         self.successful = False
         self.travel_time = 0.0
+        self.status = 'active'  # Can be: 'active', 'collided', 'successful'
         self.logger = logging.getLogger(__name__)
         # Set logging level to INFO or higher to suppress debug messages
-        self.logger.setLevel(logging.INFO) # TODO: Change to DEBUG for more detailed logging
+        self.logger.setLevel(logging.DEBUG) # TODO: Change to DEBUG for more detailed logging
 
     def update(self, dt: float) -> bool:
         """Update drone position and state"""
-        if self.successful:
+        if self.status != 'active':
+            logger.info(f"""
+                Drone {self.id} inactive:
+                Status: {self.status}
+                Position: {self.position}
+                Destination: {self.destination}
+                Distance remaining: {np.linalg.norm(self.destination - self.position):.1f}m
+            """)
             return False
             
         # Calculate vector to destination
         to_destination = self.destination - self.position
         distance = np.linalg.norm(to_destination)
         
+        logger.info(f"""
+            Drone {self.id} update:
+            Distance to destination: {distance:.1f}m
+            Current position: {self.position}
+            Destination: {self.destination}
+            Status: {self.status}
+        """)
+        
         if distance < 1.0:  # Within 1m counts as arrived
             self.successful = True
+            self.status = 'successful'  # Update status when destination is reached
             self.velocity = np.zeros(3)
-            return False
+            # Set position exactly to destination to ensure clean visualization
+            self.position = self.destination.copy()
+            logger.info(f"Drone {self.id} reached destination!")
+            return True  # Return True one last time to ensure final state is visualized
             
         # Update velocity (normalized direction * max_speed)
         direction = to_destination / distance
