@@ -1,8 +1,8 @@
 import logging
+import sys
 import time
 from typing import List, Tuple
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 from ..models.drone import Drone
@@ -77,9 +77,6 @@ class SimulationEngine:
         
         # Add simulation state flag
         self.simulation_complete = False
-        
-        # Register completion callback
-        self.visualizer.register_completion_callback(self._on_simulation_complete)
 
     def initialize_simulation(self) -> None:
         # City is already initialized in __init__
@@ -125,26 +122,6 @@ class SimulationEngine:
         
         logger.debug("State created, updating observers")
         self.state_manager.update_state(new_state)
-
-    def _on_simulation_complete(self, final_time):
-        """Called by visualizer when simulation is complete"""
-        logger.info(f"Simulation completed at time {final_time:.1f}s")
-        self.simulation_complete = True
-        
-        try:
-            # Generate and print report
-            report = self.generate_report()
-            print(report)
-            
-            # Save final state
-            self.visualizer.save_plot()
-            
-            # Let the animation continue running until window is closed
-            if self.real_time:
-                plt.gcf().canvas.manager.window.title("Simulation Complete - Close window to exit")
-                
-        except Exception as e:
-            logger.error(f"Error during simulation cleanup: {e}")
 
     def run(self) -> None:
         """
@@ -198,23 +175,27 @@ class SimulationEngine:
                 if all(drone.status in ['successful', 'collided'] for drone in self.drones):
                     logger.info("All drones have completed their routes")
                     self.simulation_complete = True
-                    # Push one final state update before stopping
-                    self._update_state()
-                    break  # Exit the simulation loop
+                    self._update_state()  # Final state update
+                    self.visualizer.save_plot()  # Save final visualization
+                    
+                    # Generate report immediately when simulation completes
+                    report = self.generate_report()
+                    sys.stdout.write("\n" + "="*50 + "\n")
+                    sys.stdout.write("Simulation Report:\n")
+                    sys.stdout.write("="*50 + "\n")
+                    sys.stdout.write(report + "\n")
+                    sys.stdout.flush()
+                    
+                    break
                 
                 self.time += dt
                 
-                # Small delay only in real-time mode
                 if self.real_time:
                     time.sleep(dt)
         except KeyboardInterrupt:
-            print("\nSimulation interrupted by user")
-
-        # Keep visualization window open if not already closed
-        if self.real_time and not self.simulation_complete:
-            plt.gcf().canvas.manager.window.title("Simulation Complete - Close window to exit")
-            plt.gcf().canvas.mpl_connect('close_event', lambda evt: self._on_simulation_complete(self.time))
-            plt.show(block=True)
+            logger.info("Simulation interrupted by user")
+        except Exception as e:
+            logger.error(f"Error during simulation: {e}", exc_info=True)
 
     def _check_all_collisions(self) -> None:
         """

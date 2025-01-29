@@ -234,10 +234,12 @@ class MatplotlibVisualizer:
         time_text = f'Simulation Time: {state.time:.1f}s'
         if all(drone['status'] in ['successful', 'collided'] for drone in state.drones):
             time_text += ' (COMPLETE)'
-            if self.on_simulation_complete:
-                callback = self.on_simulation_complete
-                self.on_simulation_complete = None
-                callback(state.time)
+            if not self.completion_pending:
+                self.completion_pending = True
+                self.completion_time = state.time
+                # Update window title
+                if hasattr(self.fig.canvas.manager, 'window'):
+                    self.fig.canvas.manager.window.title("Simulation Complete - Close window to exit")
         
         # Use figure coordinates instead of axes coordinates
         self.fig.text(
@@ -380,24 +382,26 @@ class MatplotlibVisualizer:
         # Don't try to stop the animation - just let it run
         pass
 
-    def save_plot(self, filename: str = "final_state.png") -> None:
-        """Save current plot state to file"""
+    def save_plot(self) -> None:
+        """Save the current plot state to a file"""
         try:
             # Make sure we have a valid figure before saving
             if not plt.fignum_exists(self.fig.number):
-                logger.error("Cannot save plot: Figure no longer exists")
+                logger.debug("Skipping plot save: Figure already closed")
                 return
                 
             # Force a redraw of the figure
             self.fig.canvas.draw()
             
-            # Save the figure
-            save_path = self.output_dir / filename
+            # Save to file
+            save_path = self.output_dir / f"simulation_state_{self.current_state.time:.1f}s.png"
             self.fig.savefig(save_path)
+            
             print(f"\nFinal state saved to: {save_path}")
             
         except Exception as e:
-            logger.error(f"Failed to save plot: {e}", exc_info=True)
+            # This is expected when window is closed
+            logger.debug(f"Note: Could not save plot - {e}")
 
     def _calculate_time_to_closest_approach(
         self, 
@@ -539,8 +543,4 @@ class MatplotlibVisualizer:
             ),
             fontsize=8,
             color=bubble_text_color
-        )
-
-    def register_completion_callback(self, callback):
-        """Register a callback to be called when simulation completes"""
-        self.on_simulation_complete = callback 
+        ) 

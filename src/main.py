@@ -42,13 +42,24 @@ def setup_logging(debug_mode=False):
 
 
 def main(config_path: str, real_time: bool = True):
-    config_path = Path.cwd() / config_path
+    # Handle both running from repo root and module directory
+    base_path = Path(__file__).parent.parent  # Gets to drone-sim/src parent (drone-sim directory)
+    config_path = Path(config_path)
     
-    # Create engine
+    # If running from repo root (path starts with drone-sim/)
+    if str(config_path).startswith('drone-sim/'):
+        config_path = config_path.relative_to('drone-sim')
+    
+    # Resolve paths relative to base_path
+    config_path = base_path / config_path
+    drone_models_path = base_path / "data/drones/drone_models.json"
+    cities_data_path = base_path / "data/cities/cities-data.json"
+
+    # Create engine with correct paths
     engine = SimulationEngine(
         str(config_path),
-        str(Path.cwd() / "data/drones/drone_models.json"),
-        str(Path.cwd() / "data/cities/cities-data.json"),
+        str(drone_models_path),
+        str(cities_data_path),
         real_time=real_time
     )
     engine.initialize_simulation()
@@ -69,16 +80,8 @@ def main(config_path: str, real_time: bool = True):
         while sim_thread.is_alive():
             plt.pause(0.01)  # Process matplotlib events
 
-        # Show final state
         plt.ioff()
-        plt.show(block=True)
-        
-        # Show report after window is closed
-        report = engine.generate_report()
-        print("\n" + "="*50)
-        print("Simulation Report:")
-        print("="*50)
-        print(report)
+        plt.show(block=True)  # This blocks until window is closed
             
     except KeyboardInterrupt:
         print("\nSimulation interrupted by user")
