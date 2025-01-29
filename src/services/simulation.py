@@ -2,6 +2,7 @@ import logging
 import sys
 import time
 from typing import List, Tuple
+from pathlib import Path
 
 import numpy as np
 
@@ -176,14 +177,26 @@ class SimulationEngine:
                     logger.info("All drones have completed their routes")
                     self.simulation_complete = True
                     self._update_state()  # Final state update
-                    self.visualizer.save_plot()  # Save final visualization
                     
-                    # Generate report immediately when simulation completes
+                    # Generate and save report
                     report = self.generate_report()
+                    
+                    # Save report to file
+                    output_dir = Path.cwd() / "output"
+                    output_dir.mkdir(exist_ok=True)
+                    report_path = output_dir / f"simulation_report_{self.time:.1f}s.txt"
+                    with open(report_path, 'w') as f:
+                        f.write("="*50 + "\n")
+                        f.write("Simulation Report\n")
+                        f.write("="*50 + "\n")
+                        f.write(report)
+                    
+                    # Output to console
                     sys.stdout.write("\n" + "="*50 + "\n")
                     sys.stdout.write("Simulation Report:\n")
                     sys.stdout.write("="*50 + "\n")
                     sys.stdout.write(report + "\n")
+                    sys.stdout.write(f"\nReport saved to: {report_path}\n")
                     sys.stdout.flush()
                     
                     break

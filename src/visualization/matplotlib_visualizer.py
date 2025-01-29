@@ -240,6 +240,8 @@ class MatplotlibVisualizer:
                 # Update window title
                 if hasattr(self.fig.canvas.manager, 'window'):
                     self.fig.canvas.manager.window.title("Simulation Complete - Close window to exit")
+                # Save the final state from the visualization thread
+                self.save_plot()
         
         # Use figure coordinates instead of axes coordinates
         self.fig.text(
