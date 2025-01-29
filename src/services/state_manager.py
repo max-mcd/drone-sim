@@ -1,18 +1,27 @@
-from typing import Callable, List
+import logging
+from typing import Callable, List, Protocol
 
 from ..models.simulation_state import SimulationState
 
+logger = logging.getLogger(__name__)
+
+
+class StateObserver(Protocol):
+    """Protocol for state observers"""
+    def on_state_update(self, state: SimulationState) -> None: ...
+
 
 class SimulationStateManager:
-    """Manages simulation state and notifies observers of changes"""
+    """Manages simulation state and notifies observers of changes using observer pattern."""
     
-    def __init__(self):
-        self.current_state: SimulationState = None
-        self.observers: List[Callable[[SimulationState], None]] = []
+    def __init__(self) -> None:
+        self.current_state: SimulationState | None = None
+        self.observers: List[StateObserver] = []
     
-    def update_state(self, new_state: SimulationState) -> None:
+    def update_state(self, state: SimulationState) -> None:
         """Update current state and notify all observers"""
-        self.current_state = new_state
+        logger.debug(f"State manager received update, notifying {len(self.observers)} observers")
+        self.current_state = state
         self._notify_observers()
     
     def add_observer(self, observer: Callable[[SimulationState], None]) -> None:
@@ -21,5 +30,6 @@ class SimulationStateManager:
     
     def _notify_observers(self) -> None:
         """Notify all observers with current state"""
+        logger.debug(f"Notifying {len(self.observers)} observers with state at time {self.current_state.time}")
         for observer in self.observers:
             observer(self.current_state) 

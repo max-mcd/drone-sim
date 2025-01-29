@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from ..models.drone import Drone
+from ..models.flight_path import FlightPath
 from ..models.simulation_state import SimulationState
 from ..services.state_manager import SimulationStateManager
 from ..utils.config_loader import (
@@ -37,7 +38,9 @@ class SimulationEngine:
     for potential collisions with other drones or buildings in the environment.
     """
     def __init__(self, config_path: str, drone_data_path: str, city_data_path: str, real_time: bool = True):
+        logger.info(f"Initializing simulation in {'real-time' if real_time else 'fast'} mode")
         self.config = load_simulation_config(config_path)
+        logger.debug(f"Loaded config with {len(self.config['drones'])} drones")
         self.drone_models = load_drone_models(drone_data_path)
         self.real_time = real_time  # Store real_time mode
         
@@ -94,39 +97,33 @@ class SimulationEngine:
         Each drone is assigned an incremental ID based on its position in the drones list.
         The initialized drones are stored in the simulation engine's drones list.
         """
-        for drone_config in self.config['drones']:
+        logger.debug("Initializing drones")
+        for i, drone_config in enumerate(self.config['drones']):
             model = self.drone_models[drone_config['model']]
-            start_pos = np.array([
-                drone_config['start']['x'],
-                drone_config['start']['y'],
-                drone_config['start']['z']
+            flight_path = FlightPath([
+                np.array(waypoint) for waypoint in drone_config['waypoints']
             ])
-            destination = np.array([
-                drone_config['destination']['x'],
-                drone_config['destination']['y'],
-                drone_config['destination']['z']
-            ])
-            self.drones.append(Drone(len(self.drones), model, start_pos, destination))
+            logger.debug(f"Initializing drone {i} with {len(flight_path.waypoints)} waypoints")
+            self.drones.append(Drone(len(self.drones), model, flight_path))
 
     def _update_state(self) -> None:
         """Create and update current simulation state"""
+        logger.debug(f"""
+            Creating new state:
+            Time: {self.time}
+            Drones: {len(self.drones)}
+            Active drones: {sum(1 for d in self.drones if d.status == 'active')}
+        """)
+        
         new_state = SimulationState(
             time=self.time,
-            drones=[{
-                'id': d.id,
-                'position': d.position.tolist(),
-                'velocity': d.velocity.tolist(),
-                'start_pos': d.start_pos.tolist(),
-                'destination': d.destination.tolist(),
-                'successful': d.successful,
-                'status': d.status
-            } for d in self.drones],
+            drones=self.drones,
             buildings=self.environment.current_city.buildings,
             drone_collisions=self.drone_collisions,
             building_collisions=self.building_collisions
         )
         
-        # Direct update - no more queue needed
+        logger.debug("State created, updating observers")
         self.state_manager.update_state(new_state)
 
     def _on_simulation_complete(self, final_time):
@@ -164,6 +161,14 @@ class SimulationEngine:
         3. Records any detected collisions with timestamp
         4. Advances simulation time by the configured time step
         """
+        logger.debug(f"""
+            Starting simulation:
+            Time step: {self.config['simulation']['time_step']}
+            Duration: {self.config['simulation']['duration']}
+            Drones: {len(self.drones)}
+            Real-time mode: {self.real_time}
+        """)
+        logger.debug("Starting simulation run")
         dt = self.config['simulation']['time_step']
         duration = self.config['simulation']['duration']
         
@@ -177,30 +182,33 @@ class SimulationEngine:
             """)
         
         # Run simulation
-        while self.time < duration and not self.simulation_complete:
-            # Update drones
-            for drone in self.drones:
-                drone.update(dt)
-            
-            # Check collisions
-            self._check_all_collisions()
-            
-            # Create and push new state
-            self._update_state()
-            
-            # Check if all drones are done
-            if all(drone.status in ['successful', 'collided'] for drone in self.drones):
-                logger.info("All drones have completed their routes")
-                self.simulation_complete = True
-                # Push one final state update before stopping
+        try:
+            while self.time < duration and not self.simulation_complete:
+                # Update drones
+                for drone in self.drones:
+                    drone.update(dt)
+                
+                # Check collisions
+                self._check_all_collisions()
+                
+                # Create and push new state
                 self._update_state()
-                break  # Exit the simulation loop
-            
-            self.time += dt
-            
-            # Small delay only in real-time mode
-            if self.real_time:
-                time.sleep(dt)
+                
+                # Check if all drones are done
+                if all(drone.status in ['successful', 'collided'] for drone in self.drones):
+                    logger.info("All drones have completed their routes")
+                    self.simulation_complete = True
+                    # Push one final state update before stopping
+                    self._update_state()
+                    break  # Exit the simulation loop
+                
+                self.time += dt
+                
+                # Small delay only in real-time mode
+                if self.real_time:
+                    time.sleep(dt)
+        except KeyboardInterrupt:
+            print("\nSimulation interrupted by user")
 
         # Keep visualization window open if not already closed
         if self.real_time and not self.simulation_complete:
@@ -288,10 +296,11 @@ class SimulationEngine:
         
         return ReportGenerator.generate_report(
             city_name=self.environment.current_city.name,
-            simulation_time=self.time,  # Total time until all drones finished
+            simulation_time=self.time,
             total_flights=len(self.drones),
             successful_flights=self._count_successful_flights(),
-            avg_travel_time=avg_success_time,  # Average time for successful flights only
+            avg_travel_time=avg_success_time,
             drone_collisions=self.drone_collisions,
-            building_collisions=self.building_collisions
+            building_collisions=self.building_collisions,
+            building_count=len(self.environment.current_city.buildings)
         )

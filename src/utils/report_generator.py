@@ -14,10 +14,10 @@ class ReportGenerator:
         successful_flights: int,
         avg_travel_time: float,
         drone_collisions: List[Tuple[int, int, float]],
-        building_collisions: List[Tuple[int, int, float, float, float, float]]
+        building_collisions: List[Tuple[int, int, float, float, float, float]],
+        building_count: int
     ) -> str:
-        """Generate a formatted simulation report"""
-        
+        """Generate a formatted simulation report."""
         return f"""
 +------------------------------------------------------------------------------------------------------------+
 | ____                         _____ _ _       _     _     ____  _                 _       _   _             |
@@ -28,19 +28,22 @@ class ReportGenerator:
 |                                        |___/                                                               |
 +------------------------------------------------------------------------------------------------------------+
 
-📍 City: {city_name}
+🌆 City: {city_name}
+🏢 Buildings: {building_count}
 🕒 Simulation Time: {simulation_time:.1f} seconds
 
 📊 FLIGHT STATISTICS
 ═══════════════════
 Total Flights: {total_flights}
 Successful Flights: {successful_flights}
+Success Rate: {(successful_flights/total_flights)*100:.1f}%
 Average Travel Time: {avg_travel_time:.1f} seconds
 
 💥 COLLISION SUMMARY
 ══════════════════
 Drone-Drone Collisions: {len(drone_collisions)}
-Building Collisions: {len(building_collisions)}
+Drone-Building Collisions: {len(building_collisions)}
+Total Collisions: {len(drone_collisions) + len(building_collisions)}
 
 🚨 DETAILED COLLISION LOG
 ═══════════════════════

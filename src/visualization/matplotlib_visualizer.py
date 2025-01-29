@@ -1,66 +1,12 @@
-"""2D visualization of the drone simulation using matplotlib
+"""2D visualization of the drone simulation using matplotlib.
 
-TODO Visualization Improvements:
-1. Trail Customization
-   - Add max trail length to prevent memory issues
-   - Add trail color based on drone speed
-   - Add trail fade-out effect
-   - Add option to toggle trails
-
-2. Info Bubbles
-   - Add distance to destination
-   - Add battery level
-   - Add collision warning indicators
-   - Make bubble position adjustable to prevent overlap
-
-3. Velocity Vectors
-   - Add arrow showing drone direction
-   - Scale arrow length with speed
-   - Add color gradient based on speed
-
-4. Performance
-   - Optimize trail storage
-   - Add frame skip option for faster simulation
-   - Add visualization buffer
-
-5. Interaction
-   - Add pause/resume controls
-   - Add speed controls
-   - Add zoom/pan controls
-   - Add drone selection for detailed view
-
-6. Legend Placement
-   - Move legend outside the plot grid to the right side
-   - Update __init__ to adjust figure size and subplot parameters:
-     self.fig = plt.figure(figsize=(16, 8))  # Wider figure to accommodate legend
-     plt.subplots_adjust(right=0.85)  # Leave space for legend
-     self.ax.legend(handles=self.legend_elements, 
-                   loc='center left', 
-                   bbox_to_anchor=(1.05, 0.5))
-
-7. Simulation Time Display
-   - Add time display in lower left corner
-   - Update _animation_update:
-     self.ax.text(0.02, 0.02, 
-                  f'Simulation Time: {state.time:.1f}s',
-                  transform=self.ax.transAxes,
-                  fontsize=10,
-                  bbox=dict(facecolor='black', alpha=0.7))
-
-8. Success Indication
-   - Update _plot_drone to use green for successful drones:
-     if drone['status'] == 'successful':
-         marker = 'o'  # Circle for successful drones
-         color = 'green'
-         bubble_color = 'green'  # Change from yellow to green
-         bubble_text_color = 'white'  # Better contrast on green
-
-9. Additional Ideas:
-   - Add completion percentage
-   - Add collision counter
-   - Add average speed indicator
-   - Add mission success/failure ratio
-   - Add elapsed real time vs simulation time
+Visualization features:
+1. Real-time drone position and status tracking
+2. Building layout visualization
+3. Collision detection visualization
+4. Flight path and waypoint tracking
+5. Performance metrics display
+6. Dynamic legend and status indicators
 """
 
 import logging
@@ -71,19 +17,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
 
+from ..models.building import Building
 from ..models.simulation_state import SimulationState
 
-# Configure logging after imports but before any matplotlib usage
+# Configure matplotlib logging
 logging.getLogger('matplotlib').setLevel(logging.ERROR)
-logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 logging.getLogger('PIL.PngImagePlugin').setLevel(logging.ERROR)
+logger = logging.getLogger(__name__)
 
 # Suppress matplotlib warnings and debug messages
 plt.set_loglevel('warning')
-
-# Initialize logger for this module
-logger = logging.getLogger(__name__)
-
 
 class MatplotlibVisualizer:
     """2D visualization of the drone simulation using matplotlib"""
@@ -95,8 +38,6 @@ class MatplotlibVisualizer:
             dimensions: (width, length, height) of simulation space
             real_time: If True, updates display in real-time. If False, runs faster
         """
-        # Setup logging first
-        self.logger = logging.getLogger(__name__)
         
         # Initialize counters and flags
         self.frame_count = 0
@@ -113,10 +54,15 @@ class MatplotlibVisualizer:
         # Store building patches
         self.building_patches = []
         
-        # Create figure and axes
-        self.fig = plt.figure(figsize=(16, 8))
+        # Create figure and axes with adjusted size and margins
+        self.fig = plt.figure(figsize=(16, 9))  # Taller figure
         self.ax = self.fig.add_subplot(111)
-        plt.subplots_adjust(right=0.85)
+        plt.subplots_adjust(
+            left=0.1,      # Less space on left
+            bottom=0.1,    # Space for time display
+            right=0.85,    # More space on right for legend
+            top=0.95       # Use more of top
+        )
         
         # Setup storage
         self.output_dir = Path.cwd() / "output"
@@ -127,24 +73,28 @@ class MatplotlibVisualizer:
         
         # Create legend elements
         self.legend_elements = [
-            plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='green',
-                      markersize=10, label='Active Drones'),
-            plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='red',
-                      markersize=10, label='Collided Drones'),
-            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='green',
-                      markersize=10, label='Successful Drones'),
+            plt.Line2D([0], [0], marker='*', color='none', markerfacecolor='green',
+                       markeredgecolor='white', markersize=10, label='Active Drones'),
+            plt.Line2D([0], [0], marker='*', color='none', markerfacecolor='red',
+                       markeredgecolor='white', markersize=10, label='Collided Drones'),
+            plt.Line2D([0], [0], marker='o', color='none', markerfacecolor='green',
+                       markeredgecolor='white', markersize=10, label='Successful Drones'),
             plt.Rectangle((0,0), 1, 1, fc='gray', alpha=0.5, label='Buildings'),
-            plt.Line2D([0], [0], color='lightblue', linestyle='--',
-                      label='Drone Trail'),
-            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='blue',
-                      markersize=10, label='Start Points'),
-            plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='yellow',
-                      markersize=10, label='Destinations')
+            plt.Line2D([0], [0], linestyle='--', color='lightblue', label='Drone Trail'),
+            plt.Line2D([0], [0], marker='o', color='none', markerfacecolor='blue',
+                       markeredgecolor='white', markersize=10, label='Start Points'),
+            plt.Line2D([0], [0], marker='*', color='none', markerfacecolor='yellow',
+                       markeredgecolor='white', markersize=10, label='Destinations'),
+            plt.Line2D([0], [0], marker='x', color='none', markerfacecolor='none',
+                       markeredgecolor='orange', markersize=10, markeredgewidth=2,
+                       label='Collision Point')
         ]
         
-        # Setup state management - increase buffer size and add frame skip
-        self.max_buffer_size = 500  # Increased from 100
-        self.frame_skip = 2 if real_time else 1  # Skip frames in real-time mode
+        # Default buffer settings - will be adjusted when first state arrives
+        self.max_buffer_size = 100 if real_time else 1000
+        self.frame_skip = 2 if real_time else 5
+        self.animation_interval = 50 if real_time else 1
+        
         self.state_buffer = []
         self.last_state = None
         
@@ -173,46 +123,55 @@ class MatplotlibVisualizer:
             cache_frame_data=False
         )
         
+        # Force first draw
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
+        
         # Set matplotlib mode
         if real_time:
             plt.ion()
         else:
             plt.ioff()
         
-        self.logger.debug("Visualizer initialization complete")
+        logger.debug("Visualizer initialization complete")
         
     def setup_plot(self) -> None:
         """Initialize plot styling and axes"""
-        self.logger.debug("Setting up plot...")
+        logger.debug("Setting up plot...")
         self.ax.set_xlim(-50, self.dimensions[0] + 50)
         self.ax.set_ylim(-50, self.dimensions[1] + 50)
         self.ax.grid(True, linestyle='--', alpha=0.3)
         self.ax.set_title("Drone Flight Simulation")
         self.ax.set_xlabel('X Position (m)')
         self.ax.set_ylabel('Y Position (m)')
-        self.ax.legend(handles=self.legend_elements, 
-                      loc='center left', 
-                      bbox_to_anchor=(1.05, 0.5))
-        self.logger.debug("Plot setup complete")
+        
+        # Move legend to right side of plot
+        self.ax.legend(
+            handles=self.legend_elements, 
+            loc='center left',           # Align left edge of legend
+            bbox_to_anchor=(1.02, 0.5),  # Place just outside right edge of plot
+            fontsize=9
+        )
+        logger.debug("Plot setup complete")
         
     def _animation_update(self, frame):
         """Update function called by animation system"""
         if not self.animation_started:
             self.animation_started = True
-            self.logger.info("Animation loop started")
+            logger.info("Animation loop started")
         
         self.frame_count += 1
-        self.logger.debug(f"Animation frame {self.frame_count}")
         
-        # Verify state availability
+        # Verify state availability - only warn once during startup
         if not self.state_buffer and not self.last_state:
-            self.logger.warning("No states available for animation")
+            if not self.animation_started:
+                logger.debug("Waiting for first simulation state...")  # Changed to debug level
             return
         
         # Get current state with frame skipping
         if not self.state_buffer:
             state = self.last_state
-            self.logger.debug("Using last state (buffer empty)")
+            logger.debug("Using last state (buffer empty)")
         else:
             # Skip frames if buffer is getting full
             skip_count = min(
@@ -229,10 +188,10 @@ class MatplotlibVisualizer:
         
         # Verify state data
         if not state:
-            self.logger.error("Invalid state object")
+            logger.error("Invalid state object")
             return
         
-        self.logger.debug(f"State contains: {len(state.drones)} drones, {len(state.buildings)} buildings")
+        logger.debug(f"State contains: {len(state.drones)} drones, {len(state.buildings)} buildings")
         
         # Store current state for use in _plot_drone
         self.current_state = state
@@ -241,18 +200,18 @@ class MatplotlibVisualizer:
         self.ax.clear()
         self.setup_plot()
         
-        # Add stored building patches
+        # Add building patches
         for patch in self.building_patches:
             self.ax.add_patch(patch)
         
         # Draw drones with verification
         for drone in state.drones:
             try:
-                self.logger.debug(f"Drawing drone {drone['id']} at {drone['position']}")
+                logger.debug(f"Drawing drone {drone['id']} at {drone['position']}")
                 
                 # Verify position data
                 if not all(isinstance(x, (int, float)) for x in drone['position']):
-                    self.logger.error(f"Invalid position data for drone {drone['id']}")
+                    logger.error(f"Invalid position data for drone {drone['id']}")
                     continue
                 
                 # Update and draw trail
@@ -262,7 +221,7 @@ class MatplotlibVisualizer:
                 self._plot_drone(drone)
                 
             except Exception as e:
-                self.logger.error(f"Failed to draw drone {drone['id']}: {e}")
+                logger.error(f"Failed to draw drone {drone['id']}: {e}")
         
         # Plot collision points - only show collisions that have happened up to current time
         current_collisions = [
@@ -271,23 +230,31 @@ class MatplotlibVisualizer:
         ]
         self._plot_collisions(current_collisions)
         
-        # Add simulation time display (once per frame)
+        # Move simulation time text below plot
         time_text = f'Simulation Time: {state.time:.1f}s'
         if all(drone['status'] in ['successful', 'collided'] for drone in state.drones):
             time_text += ' (COMPLETE)'
             if self.on_simulation_complete:
                 callback = self.on_simulation_complete
-                self.on_simulation_complete = None  # Prevent multiple calls
+                self.on_simulation_complete = None
                 callback(state.time)
         
-        self.ax.text(0.02, 0.02, 
-                    time_text,
-                    transform=self.ax.transAxes,
-                    fontsize=10,
-                    bbox=dict(facecolor='black', alpha=0.7))
+        # Use figure coordinates instead of axes coordinates
+        self.fig.text(
+            0.02, 0.02,  # Position in figure coordinates
+            time_text,
+            fontsize=10,
+            color='white',  # Make text white to match dark theme
+            bbox=dict(
+                facecolor='black',
+                alpha=0.7,
+                pad=0.5,
+                edgecolor='none'  # Remove the border
+            )
+        )
         
         self.frames_rendered += 1
-        self.logger.debug(f"Frame {self.frame_count} complete. Total frames rendered: {self.frames_rendered}")
+        logger.debug(f"Frame {self.frame_count} complete. Total frames rendered: {self.frames_rendered}")
 
     def _update_trails(self, drone: dict) -> None:
         """Update and manage trail for a single drone"""
@@ -318,46 +285,28 @@ class MatplotlibVisualizer:
                 )
 
     def on_state_update(self, state: SimulationState) -> None:
-        """Buffer state updates from simulation"""
+        """Handle new simulation state update"""
+        # Initialize buildings on first state
         if not self.received_first_state:
             self.received_first_state = True
-            self.logger.info("Received first state update")
             self._initialize_building_patches(state.buildings)
         
-        self.state_updates_received += 1
+        self.state_buffer.append(state)
         
-        # Skip some updates if buffer is getting full
-        if len(self.state_buffer) > self.max_buffer_size * 0.8:  # 80% full
-            if self.state_updates_received % 3 != 0:  # Skip two out of three updates
-                self.logger.debug("Skipping update due to high buffer usage")
-                return
-        
-        # Add state to buffer
-        if len(self.state_buffer) < self.max_buffer_size:
-            self.state_buffer.append(state)
-            self.logger.debug(f"""
-                State update received:
-                Update #{self.state_updates_received}
-                Time: {state.time:.2f}s
-                Drones: {len(state.drones)}
-                Buildings: {len(state.buildings)}
-                Buffer size: {len(self.state_buffer)}/{self.max_buffer_size}
-            """)
-        else:
-            self.logger.warning(
-                f"State buffer full ({self.max_buffer_size}), dropping update. "
-                f"Consider increasing animation_interval or reducing simulation speed."
-            )
+        # Force canvas update in fast mode
+        if not self.real_time:
+            self.fig.canvas.draw()
+            self.fig.canvas.flush_events()
 
-    def _initialize_building_patches(self, buildings) -> None:
+    def _initialize_building_patches(self, buildings: List[Building]) -> None:
         """Create building patches once during initialization"""
-        self.logger.debug("Initializing building patches...")
+        logger.debug(f"Initializing {len(buildings)} building patches")
         self.building_patches = []
         
         for i, building in enumerate(buildings):
             try:
                 rect = plt.Rectangle(
-                    (building.x - building.width/2,
+                    (building.x - building.width/2,  # Direct property access
                      building.y - building.length/2),
                     building.width,
                     building.length,
@@ -366,10 +315,16 @@ class MatplotlibVisualizer:
                     zorder=1
                 )
                 self.building_patches.append(rect)
+                if i < 5:  # Log first few buildings for verification
+                    logger.debug(f"Building {i}: pos=({building.x}, {building.y}), "
+                               f"size={building.width}x{building.length}")
             except Exception as e:
-                self.logger.error(f"Failed to create building patch {i}: {e}", exc_info=True)
+                logger.error(f"Failed to create building {i}: {e}")
         
-        self.logger.debug(f"Created {len(self.building_patches)} building patches")
+        logger.debug(f"Created {len(self.building_patches)} building patches")
+        
+        # Force a redraw to show buildings immediately
+        self.fig.canvas.draw()
 
     def _plot_collisions(self, collisions: List[Tuple]) -> None:
         """Plot collision points with warning indicators"""
@@ -430,7 +385,7 @@ class MatplotlibVisualizer:
         try:
             # Make sure we have a valid figure before saving
             if not plt.fignum_exists(self.fig.number):
-                self.logger.error("Cannot save plot: Figure no longer exists")
+                logger.error("Cannot save plot: Figure no longer exists")
                 return
                 
             # Force a redraw of the figure
@@ -442,7 +397,7 @@ class MatplotlibVisualizer:
             print(f"\nFinal state saved to: {save_path}")
             
         except Exception as e:
-            self.logger.error(f"Failed to save plot: {e}", exc_info=True)
+            logger.error(f"Failed to save plot: {e}", exc_info=True)
 
     def _calculate_time_to_closest_approach(
         self, 
@@ -488,27 +443,28 @@ class MatplotlibVisualizer:
         vel = drone['velocity']
         speed = np.linalg.norm(vel)
         
-        # Detailed position logging for Drone 2
-        if drone['id'] == 2:
-            logger.info(f"""
-                Visualization update for Drone 2:
-                Time: {self.current_state.time:.1f}s
-                Position: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})
-                Status: {drone['status']}
-                Speed: {speed:.2f} m/s
-                Distance to destination: {np.linalg.norm(np.array(pos) - np.array(drone['destination'])):.2f}m
-            """)
-        
-        # Plot start point (blue circle)
+        # Plot start and end points using flight path
+        waypoints = np.array(drone['flight_path'])
         self.ax.scatter(
-            drone['start_pos'][0], drone['start_pos'][1],
+            waypoints[0][0], waypoints[0][1],  # First waypoint
             c='blue', marker='o', s=100, zorder=2
         )
-        
-        # Plot destination (yellow star)
         self.ax.scatter(
-            drone['destination'][0], drone['destination'][1],
+            waypoints[-1][0], waypoints[-1][1],  # Last waypoint
             c='yellow', marker='*', s=100, zorder=2
+        )
+        
+        # Plot complete flight path
+        self.ax.plot(
+            waypoints[:, 0], waypoints[:, 1],
+            'y--', alpha=0.3, zorder=1
+        )
+        
+        # Plot current waypoint
+        current = waypoints[drone['current_waypoint_index']]
+        self.ax.scatter(
+            current[0], current[1],
+            c='yellow', marker='o', s=50, zorder=2
         )
         
         # Determine drone marker and color based on status

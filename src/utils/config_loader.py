@@ -1,5 +1,7 @@
 import json
-from typing import Dict
+from typing import Dict, List
+
+import numpy as np
 
 from ..models.drone import DroneModel
 
@@ -29,23 +31,38 @@ def load_city_data(city_data_path: str, city_name: str) -> dict:
         return data['cities'][city_name]
 
 
+def validate_drone_positions(drone_configs: List[dict]) -> None:
+    """Validate drone configurations
+    
+    Checks:
+    1. No two drones share the same starting position
+    2. Each drone has at least 2 waypoints
+    """
+    start_positions = {}
+    for i, config in enumerate(drone_configs):
+        # Validate waypoint count
+        if len(config['waypoints']) < 2:
+            raise ValueError(f"Drone {i} must have at least 2 waypoints")
+            
+        # Validate unique starting positions
+        start_pos = tuple(config['waypoints'][0])
+        if start_pos in start_positions:
+            raise ValueError(f"Invalid configuration: Drone {i} and {start_positions[start_pos]} share starting position {start_pos}")
+        start_positions[start_pos] = i
+
+
 def load_simulation_config(path: str) -> dict:
+    """Load and validate simulation configuration from JSON file"""
     with open(path) as f:
         data = json.load(f)
         
-        # Convert coordinate lists to dicts for each drone
-        for drone in data['drones']:
-            drone['start'] = {
-                'x': drone['start'][0],
-                'y': drone['start'][1],
-                'z': drone['start'][2]
-            }
-            drone['destination'] = {
-                'x': drone['destination'][0],
-                'y': drone['destination'][1],
-                'z': drone['destination'][2]
-            }
-        return data
+    # Convert waypoint lists to FlightPath objects
+    for drone in data['drones']:
+        drone['flight_path'] = [
+            np.array(waypoint) for waypoint in drone['waypoints']
+        ]
+    
+    return data
 
 
 def load_drone_models(path: str) -> Dict[str, DroneModel]:

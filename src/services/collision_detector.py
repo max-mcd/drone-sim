@@ -34,7 +34,7 @@ class CollisionDetector:
         
         # Debug log when drones are getting close
         if distance < 50.0:
-            logger.info(f"Checking potential collision...")
+            logger.info("Checking potential collision...")
 
         return distance < CollisionDetector.COLLISION_THRESHOLD
 

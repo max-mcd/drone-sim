@@ -9,14 +9,31 @@ from ..models.city_data import CityData
 
 class Environment:
     def __init__(self, city_data_path: str, dimensions: Tuple[float, float, float]):
+        with open(city_data_path) as f:
+            self.city_data = json.load(f)
         self.dimensions = dimensions
-        with open(city_data_path, 'r') as f:
-            data = json.load(f)
-            self.cities = {
-                name: self._generate_city(city_data, name)
-                for name, city_data in data['cities'].items()
-            }
         self.current_city = None
+
+    def set_city(self, city_name: str) -> None:
+        """Set the current city by name and generate its layout"""
+        if city_name not in self.city_data['cities']:
+            raise ValueError(f"City {city_name} not found")
+            
+        city_info = self.city_data['cities'][city_name]
+        buildings = self._generate_buildings(
+            density=int(city_info['building_density_per_km2']),
+            avg_height=float(city_info['avg_height_m']),
+            dimensions=self.dimensions
+        )
+        
+        self.current_city = CityData(
+            name=city_name,
+            building_density=int(city_info['building_density_per_km2']),
+            avg_height=float(city_info['avg_height_m']),
+            population_density=int(city_info['population_density_per_km2']),
+            takeoff_locations=int(city_info['takeoff_landing_locations_count']),
+            buildings=buildings
+        )
 
     def _generate_city(self, city_data: dict, city_name: str) -> CityData:
         """Generate a city from the provided parameters"""
@@ -68,6 +85,7 @@ class Environment:
             raise ValueError("City dimensions must be positive")
         
         num_buildings = int((dimensions[0] * dimensions[1] / 1e6) * density)
+        print(f"Generating {num_buildings} buildings for density {density}/km²")  # Debug print
         buildings = []
         
         for _ in range(num_buildings):
@@ -80,9 +98,3 @@ class Environment:
             buildings.append(Building(x, y, height, width, length))
         
         return buildings
-
-    def set_city(self, city_name: str) -> None:
-        """Set the current city by name"""
-        if city_name not in self.cities:
-            raise ValueError(f"City {city_name} not found")
-        self.current_city = self.cities[city_name]
