@@ -4,27 +4,49 @@ cd "$(dirname "$0")/.."  # Move to project root (drone-sim directory)
 # Set Python path
 export PYTHONPATH=.
 
-# Initialize base command
-CMD="python -m src.main data/config/simulation_config.json"
+# Default values
+DEBUG=false
+FAST=false
+AVOID_COLLISIONS=false
 
-# Process all flags
+# Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --fast)
-            CMD="$CMD --fast"
+        --debug)
+            DEBUG=true
             shift
             ;;
-        --debug)
-            CMD="$CMD --debug"
+        --fast)
+            FAST=true
+            shift
+            ;;
+        --avoid-collisions)
+            AVOID_COLLISIONS=true
             shift
             ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: $0 [--fast] [--debug]"
+            echo "Usage: $0 [--fast] [--debug] [--avoid-collisions]"
             exit 1
             ;;
     esac
 done
+
+# Initialize base command
+CMD="python -m src.main data/config/simulation_config.json"
+
+# Process all flags
+if [ "$FAST" = true ]; then
+    CMD="$CMD --fast"
+fi
+
+if [ "$DEBUG" = true ]; then
+    CMD="$CMD --debug"
+fi
+
+if [ "$AVOID_COLLISIONS" = true ]; then
+    CMD="$CMD --avoid-collisions"
+fi
 
 # Run the command
 if [[ $CMD == *"--debug"* ]]; then

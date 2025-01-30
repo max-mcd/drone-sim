@@ -8,6 +8,38 @@ from ..models.city_data import CityData
 
 
 class Environment:
+    """Environment manages the simulation's physical environment and conditions.
+    
+    This class is responsible for:
+    - Loading and managing city data and layouts
+    - Generating and placing buildings based on city parameters
+    - Managing environmental conditions that affect drone flight
+    
+    The Environment class could be extended to include additional environmental factors such as:
+    
+    Weather Conditions:
+    - Wind speed and direction (affects drone stability and energy usage)
+    - Precipitation (reduces visibility and affects sensors)
+    - Temperature (impacts battery performance and motor efficiency)
+    - Air pressure (affects lift and flight characteristics)
+    - Visibility conditions (fog, smog affecting sensor performance)
+    
+    Time-based Factors:
+    - Time of day (affecting visibility and traffic patterns)
+    - Seasonal variations (temperature, daylight hours)
+    - Solar radiation (affecting solar-powered drones)
+    
+    Urban Environment:
+    - RF interference zones (affecting drone communications)
+    - No-fly zones (restricted airspace)
+    - Temporary obstacles (construction cranes, event structures)
+    - Bird activity zones (risk of wildlife collisions)
+    - Thermal updrafts from buildings
+    
+    These extensions would allow for more realistic simulation of drone operations
+    in varying environmental conditions, enabling better testing of drone control
+    systems and flight planning algorithms.
+    """
     def __init__(self, city_data_path: str, dimensions: Tuple[float, float, float]):
         with open(city_data_path) as f:
             self.city_data = json.load(f)

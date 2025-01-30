@@ -19,8 +19,11 @@ def setup_logging(debug_mode=False):
     # Configure specific loggers
     loggers = {
         'src.models.drone': logging.WARNING,
+        'src.models.drone_model': logging.WARNING,
         'src.services.simulation': logging.WARNING,
         'src.visualization.matplotlib_visualizer': logging.WARNING,
+        'src.services.collision_detector': logging.WARNING,
+        'src.services.collision_avoidance': logging.WARNING,
         'matplotlib': logging.ERROR,
         'PIL.PngImagePlugin': logging.ERROR
     }
@@ -28,9 +31,12 @@ def setup_logging(debug_mode=False):
     if debug_mode:
         debug_loggers = [
             'src.models.drone',
+            'src.models.drone_model',
             'src.services.simulation',
             'src.visualization.matplotlib_visualizer',
             'src.services.state_manager',
+            'src.services.collision_detector',
+            'src.services.collision_avoidance',
             'src.utils.config_loader'
         ]
         for logger_name in debug_loggers:
@@ -55,12 +61,23 @@ def main(config_path: str, real_time: bool = True):
     drone_models_path = base_path / "data/drones/drone_models.json"
     cities_data_path = base_path / "data/cities/cities-data.json"
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config", help="Path to simulation config file")
+    parser.add_argument("--fast", action="store_true", help="Run in fast mode without visualization")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--avoid-collisions", action="store_true", 
+                       help="Enable collision avoidance system")
+    args = parser.parse_args()
+    
+    setup_logging(debug_mode=args.debug)
+    
     # Create engine with correct paths
     engine = SimulationEngine(
         str(config_path),
         str(drone_models_path),
         str(cities_data_path),
-        real_time=real_time
+        real_time=real_time,
+        avoid_collisions=args.avoid_collisions
     )
     engine.initialize_simulation()
     
@@ -94,6 +111,8 @@ if __name__ == "__main__":
     parser.add_argument("config", help="Path to simulation config file")
     parser.add_argument("--fast", action="store_true", help="Run in fast mode without visualization")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--avoid-collisions", action="store_true", 
+                       help="Enable collision avoidance system")
     args = parser.parse_args()
     
     setup_logging(debug_mode=args.debug)
