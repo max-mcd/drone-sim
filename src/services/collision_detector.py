@@ -1,9 +1,10 @@
 import logging
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
+
 import numpy as np
 
 from ..models.building import Building
-from ..models.drone import Drone
+from ..models.drone import Drone, DroneStatus
 
 # Configure collision detector logging
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ class CollisionDetector:
         
     def check_drone_collision(self, drone1: Drone, drone2: Drone) -> bool:
         """Check for immediate collision between two drones"""
-        if drone1.status == 'collided' or drone2.status == 'collided':
+        if drone1.status == DroneStatus.COLLIDED or drone2.status == DroneStatus.COLLIDED:
             return False
 
         # Use smaller buffer if either drone is already yielding
@@ -97,7 +98,7 @@ class CollisionDetector:
 
     def check_future_collision(self, drone1: Drone, drone2: Drone) -> Optional[float]:
         """Check if two drones will collide within the time horizon"""
-        if drone1.status != 'active' or drone2.status != 'active':
+        if drone1.status != DroneStatus.ACTIVE or drone2.status != DroneStatus.ACTIVE:
             return None
         
         # Always use full safety buffer for future collision prediction

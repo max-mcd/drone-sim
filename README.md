@@ -79,6 +79,7 @@ When enabled, the system:
    - Relative velocities
 
 The system uses different safety buffers:
+
 - Large buffer (30-40m) for initial collision prediction
 - Medium buffer (20-25m) for non-yielding drones
 - Small buffer (10-15m) for drones already in avoidance mode

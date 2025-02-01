@@ -1,13 +1,18 @@
 import logging
+from enum import Enum
 
 import numpy as np
-from typing import List, Optional, Tuple
 
 from .drone_model import DroneModel  # Import DroneModel from correct file
 from .flight_path import FlightPath  # Import FlightPath from correct file
 
 logger = logging.getLogger(__name__)
 
+class DroneStatus(Enum):
+    ACTIVE = 'active'
+    SUCCESSFUL = 'successful'
+    COLLIDED = 'collided'
+    BATTERY_DEPLETED = 'battery_depleted'
 
 class Drone:
     def __init__(self, id: int, model: DroneModel, start: np.ndarray, 
@@ -19,7 +24,7 @@ class Drone:
         self._avoidance_velocity = None
         self._avoidance_timer = 0.0
         self.flight_path = flight_path
-        self.status = 'active'  # 'active', 'successful', or 'collided'
+        self.status = DroneStatus.ACTIVE
         self.battery_remaining = model.battery_life * 3600  # Convert to seconds
         self.successful = False
         self.travel_time = 0.0
@@ -35,7 +40,24 @@ class Drone:
 
     @velocity.setter
     def velocity(self, new_velocity: np.ndarray):
-        """Set base velocity"""
+        """Set the velocity of the drone
+        
+        This property setter:
+        1. Validates input is a 3D numpy array
+        2. Checks if speed exceeds drone's max_speed
+        3. If over max_speed, scales velocity vector down while preserving direction
+        
+        Args:
+            new_velocity (np.ndarray): 3D velocity vector [vx, vy, vz]
+            
+        Raises:
+            ValueError: If velocity is not a 3D numpy array
+        """
+        if not isinstance(new_velocity, np.ndarray) or new_velocity.shape != (3,):
+            raise ValueError("Velocity must be a 3D numpy array")
+        speed = np.linalg.norm(new_velocity)
+        if speed > self.model.max_speed:
+            new_velocity = new_velocity * (self.model.max_speed / speed)
         self._base_velocity = new_velocity
 
     def apply_avoidance_velocity(self, new_velocity: np.ndarray, duration: float = 2.0):
@@ -56,10 +78,17 @@ class Drone:
 
     def update(self, dt: float) -> bool:
         """Update drone position and state"""
-        if self.status != 'active':
+        if self.status != DroneStatus.ACTIVE:
             logger.info(f"Drone {self.id} inactive...")
             return False
             
+        # Update battery
+        self.battery_remaining -= dt
+        if self.battery_remaining <= 0:
+            self.status = DroneStatus.BATTERY_DEPLETED
+            logger.info(f"Drone {self.id} battery depleted")
+            return False
+        
         current_waypoint = self.flight_path.get_next_waypoint()
         to_waypoint = current_waypoint - self.position
         distance = np.linalg.norm(to_waypoint)
@@ -75,7 +104,7 @@ class Drone:
         if distance < 1.0:  # Reached waypoint
             if not self.flight_path.advance_waypoint():
                 self.successful = True
-                self.status = 'successful'
+                self.status = DroneStatus.SUCCESSFUL
                 self.velocity = np.zeros(3)  # Stop moving
                 self.position = current_waypoint.copy()  # Snap to final position
                 return True
@@ -125,6 +154,26 @@ class Drone:
 
     def predict_position(self, time_horizon: float) -> np.ndarray:
         """Predict drone position after time_horizon seconds
+        # Calculate predicted position based on current velocity and direction
+        # 
+        # The prediction uses basic kinematics:
+        # predicted_pos = current_pos + velocity * time
+        #
+        # For velocity, we use either:
+        # 1. Current velocity if in normal flight
+        # 2. Direction vector * max_speed if changing waypoints
+        #    This handles the case where the drone is transitioning between waypoints
+        #    and needs to accelerate to max speed in the new direction. Using the
+        #    current velocity would be inaccurate since the drone will quickly
+        #    adjust its velocity vector to point toward the new waypoint at max speed.
+        #
+        # Direction vector is calculated as:
+        # direction = (target - current) / ||target - current||
+        # where ||x|| represents the Euclidean norm/magnitude:
+        # ||x|| = sqrt(x[0]^2 + x[1]^2 + x[2]^2)
+        #
+        # Distance is calculated using the Euclidean norm:
+        # distance = ||target - current||
         
         Args:
             time_horizon: Time in seconds to predict ahead
@@ -147,6 +196,7 @@ class Drone:
         direction = next_wp - current_wp
         distance_to_next = np.linalg.norm(direction)
         if distance_to_next > 0:
+            # Normalize direction vector
             direction = direction / distance_to_next
         
         # Predict considering current velocity and waypoint path

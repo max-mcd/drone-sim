@@ -15,7 +15,8 @@ class ReportGenerator:
         avg_travel_time: float,
         drone_collisions: List[Tuple[int, int, float]],
         building_collisions: List[Tuple[int, int, float, float, float, float]],
-        building_count: int
+        building_count: int,
+        battery_depletions: int = 0
     ) -> str:
         """Generate a formatted simulation report."""
         return f"""
@@ -36,6 +37,7 @@ class ReportGenerator:
 ═══════════════════
 Total Flights: {total_flights}
 Successful Flights: {successful_flights}
+Battery Depletions: {battery_depletions}
 Success Rate: {(successful_flights/total_flights)*100:.1f}%
 Average Travel Time: {avg_travel_time:.1f} seconds
 

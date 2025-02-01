@@ -1,12 +1,15 @@
 import logging
+import warnings
 from pathlib import Path
 from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
+from matplotlib.lines import Line2D
 
 from ..models.building import Building
+from ..models.drone import DroneStatus
 from ..models.simulation_state import SimulationState
 
 # Configure matplotlib logging
@@ -55,14 +58,34 @@ class MatplotlibVisualizer:
         plt.subplots_adjust(left=0.1, bottom=0.1, right=0.85, top=0.95)
         
         # Track visual elements
+        self.drone_colors = {}        # {drone_id: color}
         self.drones_scatter = {}      # {drone_id: scatter_object}
         self.drone_trails = {}        # {drone_id: list_of_line_objects}
         self.collision_artists = []    # List of collision markers
         self.info_bubbles = {}        # {drone_id: annotation_object}
         self.waypoint_markers = {}    # {drone_id: {start, end, current}}
-        self.safety_circles = {}      # {drone_id: circle_object}
         self.time_label = None        # Will be created in _update_time_label
         self.building_patches = []     # List of building patches
+        
+        # Initialize marker mapping
+        self.drone_markers = {
+            DroneStatus.ACTIVE: '*',           # Star for active drones
+            DroneStatus.SUCCESSFUL: 'o',       # Circle for successful drones
+            DroneStatus.COLLIDED: '*',         # Star for collided drones (changed from 'x')
+            DroneStatus.BATTERY_DEPLETED: 's'  # Square for battery depleted
+        }
+        
+        # Initialize color scheme
+        self.status_colors = {
+            DroneStatus.ACTIVE: 'green',        # Green for active drones
+            DroneStatus.SUCCESSFUL: 'green',     # Green for success
+            DroneStatus.COLLIDED: 'red',        # Red for collisions
+            DroneStatus.BATTERY_DEPLETED: 'orange'
+        }
+        
+        # Initialize trail properties
+        self.max_trail_length = 50  # Maximum number of trail points to keep
+        self.trail_alpha = 0.3      # Transparency of trail lines
         
         # Setup static plot elements
         self._static_plot_setup()
@@ -70,39 +93,9 @@ class MatplotlibVisualizer:
         # Setup storage
         self.output_dir = Path.cwd() / "output"
         self.output_dir.mkdir(exist_ok=True)
-        self.drone_trails = {}
-        self.max_trail_length = 50
         
-        # Create legend elements
-        self.legend_elements = [
-            plt.Line2D([0], [0], marker='*', color='none', markerfacecolor='green',
-                       markeredgecolor='white', markersize=10, label='Active Drones'),
-            plt.Line2D([0], [0], marker='*', color='none', markerfacecolor='red',
-                       markeredgecolor='white', markersize=10, label='Collided Drones'),
-            plt.Line2D([0], [0], marker='o', color='none', markerfacecolor='green',
-                       markeredgecolor='white', markersize=10, label='Successful Drones'),
-            plt.Rectangle((0,0), 1, 1, fc='gray', alpha=0.5, label='Buildings'),
-            plt.Line2D([0], [0], linestyle='--', color='lightblue', label='Drone Trail'),
-            plt.Line2D([0], [0], marker='o', color='none', markerfacecolor='blue',
-                       markeredgecolor='white', markersize=10, label='Start Points'),
-            plt.Line2D([0], [0], marker='*', color='none', markerfacecolor='yellow',
-                       markeredgecolor='white', markersize=10, label='Destinations'),
-            plt.Line2D([0], [0], marker='x', color='none', markerfacecolor='none',
-                       markeredgecolor='orange', markersize=10, markeredgewidth=2,
-                       label='Collision Point')
-        ]
-        
-        # Default buffer settings - will be adjusted when first state arrives
-        self.max_buffer_size = 100 if real_time else 1000
-        self.frame_skip = 2 if real_time else 5
         self.animation_interval = 50  # Faster updates for smoother animation
         self.is_drawing = False  # Lock to prevent recursive drawing
-        
-        self.state_buffer = []
-        self.last_state = None
-        
-        # Add completion callback
-        self.on_simulation_complete = None
         
         # Add completion flag
         self.completion_pending = False
@@ -119,25 +112,6 @@ class MatplotlibVisualizer:
         self._update_time_label()
         
         logger.debug("Visualizer initialization complete")
-        
-    def setup_plot(self) -> None:
-        """Initialize plot styling and axes"""
-        logger.debug("Setting up plot...")
-        self.ax.set_xlim(-50, self.dimensions[0] + 50)
-        self.ax.set_ylim(-50, self.dimensions[1] + 50)
-        self.ax.grid(True, linestyle='--', alpha=0.3)
-        self.ax.set_title("Drone Flight Simulation")
-        self.ax.set_xlabel('X Position (m)')
-        self.ax.set_ylabel('Y Position (m)')
-        
-        # Move legend to right side of plot
-        self.ax.legend(
-            handles=self.legend_elements, 
-            loc='center left',           # Align left edge of legend
-            bbox_to_anchor=(1.02, 0.5),  # Place just outside right edge of plot
-            fontsize=9
-        )
-        logger.debug("Plot setup complete")
         
     def _animation_update(self, frame):
         """Update dynamic elements without clearing the plot"""
@@ -166,10 +140,13 @@ class MatplotlibVisualizer:
         """Clear all dynamic elements from previous frame"""
         # Clear drones and their associated elements
         for drone_id in list(self.drones_scatter.keys()):
-            self.drones_scatter[drone_id].remove()
+            if drone_id in self.drones_scatter and self.drones_scatter[drone_id] is not None:
+                self.drones_scatter[drone_id].remove()
+            
             if drone_id in self.info_bubbles:
                 self.info_bubbles[drone_id].remove()
-            if drone_id in self.waypoint_markers:
+            
+            if drone_id in self.waypoint_markers and isinstance(self.waypoint_markers[drone_id], dict):
                 for marker in self.waypoint_markers[drone_id].values():
                     marker.remove()
             # Clear safety circles and other drone-specific elements
@@ -184,13 +161,80 @@ class MatplotlibVisualizer:
         
         # Clear collision markers
         for artist in self.collision_artists:
-            artist.remove()
+            if artist is not None:
+                try:
+                    artist.remove()
+                except ValueError:
+                    pass  # Artist was already removed
         self.collision_artists.clear()
 
     def _update_all_drones(self):
-        """Update all drone visual elements"""
+        """Update drone positions and trails"""
+        if not self.current_state:
+            return
+        
         for drone in self.current_state.drones:
-            self._plot_drone(drone)  # Use the original plotting function that includes all elements
+            waypoints = drone['flight_path']
+            
+            # Plot waypoints if not already plotted
+            if drone['id'] not in self.waypoint_markers:
+                # Plot start point
+                self.ax.scatter(
+                    waypoints[0][0], waypoints[0][1],
+                    color='blue', marker='o', s=100, zorder=2
+                )
+                
+                # Plot intermediate waypoints
+                if len(waypoints) > 2:
+                    self.ax.scatter(
+                        [wp[0] for wp in waypoints[1:-1]],
+                        [wp[1] for wp in waypoints[1:-1]],
+                        color='yellow', marker='o', s=50, zorder=2
+                    )
+                
+                # Plot destination
+                self.ax.scatter(
+                    waypoints[-1][0], waypoints[-1][1],
+                    color='yellow', marker='*', s=100, zorder=2
+                )
+                
+                # Store that we've plotted waypoints
+                self.waypoint_markers[drone['id']] = True
+            
+            # Get marker and status-based color
+            marker = self.drone_markers.get(drone['status'], self.drone_markers[DroneStatus.ACTIVE])
+            status_color = self.status_colors.get(drone['status'], self.status_colors[DroneStatus.ACTIVE])
+            
+            # Plot drone position with status color
+            self.drones_scatter[drone['id']] = self.ax.scatter(
+                drone['position'][0], drone['position'][1],
+                color=status_color,
+                marker=marker,
+                s=100,
+                zorder=3
+            )
+            
+            # Add info bubble with status color
+            info_text = (
+                f"ID: {drone['id']}\n"
+                f"Speed: {np.linalg.norm(drone['velocity']):.1f} m/s\n"
+                f"Alt: {drone['position'][2]:.1f}m"
+            )
+            
+            self.info_bubbles[drone['id']] = self.ax.annotate(
+                info_text,
+                xy=(drone['position'][0], drone['position'][1]),
+                xytext=(10, 10),
+                textcoords='offset points',
+                bbox=dict(boxstyle='round,pad=0.5', fc=status_color, alpha=0.7),
+                fontsize=8,
+                color='black'
+            )
+            
+            # Update drone trail with drone-specific color
+            if drone['id'] not in self.drone_trails:
+                self.drone_trails[drone['id']] = []
+            self._update_drone_trail(drone)
 
     def on_state_update(self, state: SimulationState) -> None:
         """Handle new simulation state update"""
@@ -248,316 +292,8 @@ class MatplotlibVisualizer:
         # Force a redraw to show buildings immediately
         self.fig.canvas.draw()
 
-    def _plot_collisions(self, collisions: List[Tuple]) -> None:
-        """Plot collision points with warning indicators"""
-        if not collisions:
-            return
-            
-        # Plot each collision point that has occurred
-        for collision in collisions:
-            # Building collisions have 6 elements (drone_id, building_id, time, x, y, z)
-            # Drone collisions have 3 elements (drone1_id, drone2_id, time)
-            if len(collision) == 6:  # Building collision
-                x, y = collision[3], collision[4]  # Get collision coordinates
-                color = 'orange'  # Different color for building collisions
-                collision_time = collision[2]
-            else:  # Drone collision
-                drone1 = next(d for d in self.current_state.drones if d['id'] == collision[0])
-                x, y = drone1['position'][0], drone1['position'][1]
-                color = 'red'
-                collision_time = collision[2]
-            
-            # Plot collision marker
-            self.ax.scatter(
-                x, y,
-                c=color,
-                marker='x',
-                s=100,
-                zorder=3  # Ensure visible above other elements
-            )
-            
-            # Add warning circle
-            warning_circle = plt.Circle(
-                (x, y),
-                radius=10,  # 10m radius
-                color=color,
-                fill=False,
-                alpha=0.3,
-                linestyle=':',
-                zorder=2
-            )
-            self.ax.add_patch(warning_circle)
-            
-            # Add collision time label
-            self.ax.text(
-                x, y - 15,
-                f'Collision at {collision_time:.1f}s',
-                color=color,
-                fontsize=8,
-                ha='center'
-            )
-
-    def stop_animation(self):
-        """Properly stop the animation"""
-        # Don't try to stop the animation - just let it run
-        pass
-
-    def save_plot(self) -> None:
-        """Save the current plot state to a file"""
-        try:
-            # Make sure we have a valid figure before saving
-            if not plt.fignum_exists(self.fig.number):
-                logger.debug("Skipping plot save: Figure already closed")
-                return
-                
-            # Force a redraw of the figure
-            self.fig.canvas.draw()
-            
-            # Save to file
-            save_path = self.output_dir / f"simulation_state_{self.current_state.time:.1f}s.png"
-            self.fig.savefig(save_path)
-            
-            print(f"\nFinal state saved to: {save_path}")
-            
-        except Exception as e:
-            # This is expected when window is closed
-            logger.debug(f"Note: Could not save plot - {e}")
-
-    def _calculate_time_to_closest_approach(
-        self, 
-        pos1: List[float], 
-        vel1: List[float], 
-        pos2: List[float], 
-        vel2: List[float]
-    ) -> float:
-        """Calculate time until closest approach between two drones
-        
-        Args:
-            pos1: Position vector of first drone [x,y,z]
-            vel1: Velocity vector of first drone [vx,vy,vz]
-            pos2: Position vector of second drone [x,y,z]
-            vel2: Velocity vector of second drone [vx,vy,vz]
-            
-        Returns:
-            Time (in seconds) until closest approach, or None if drones are moving apart
-        """
-        pos1 = np.array(pos1)
-        pos2 = np.array(pos2)
-        vel1 = np.array(vel1)
-        vel2 = np.array(vel2)
-        
-        # Calculate relative position and velocity
-        rel_pos = pos1 - pos2
-        rel_vel = vel1 - vel2
-        
-        # If relative speed is zero, return None
-        if np.allclose(rel_vel, 0):
-            return None
-            
-        # Calculate time to closest approach
-        # This is when relative position dot relative velocity = 0
-        t = -np.dot(rel_pos, rel_vel) / np.dot(rel_vel, rel_vel)
-        
-        # Only return positive times (future collisions)
-        return t if t > 0 else None 
-
-    def _plot_drone(self, drone: dict) -> None:
-        """Plot a single drone with its info bubble and waypoints"""
-        pos = drone['position']
-        vel = drone['velocity']
-        speed = np.linalg.norm(vel)
-        drone_id = drone['id']
-        waypoints = np.array(drone['flight_path'])
-        
-        # Initialize containers for this drone's artists
-        self.drones_scatter[drone_id] = None  # Will hold the drone marker
-        self.waypoint_markers[drone_id] = {}  # Initialize waypoint markers dict
-        
-        # Plot start point (blue circle with yellow center)
-        self.waypoint_markers[drone_id]['start'] = self.ax.scatter(
-            waypoints[0][0], waypoints[0][1],
-            c='yellow', marker='o', 
-            edgecolor='blue',
-            s=100, zorder=2
-        )
-        
-        # Plot destination
-        self.waypoint_markers[drone_id]['end'] = self.ax.scatter(
-            waypoints[-1][0], waypoints[-1][1],  # Use last waypoint
-            c='yellow', marker='*',
-            s=100, zorder=2
-        )
-        
-        # Plot planned path
-        self.ax.plot(
-            waypoints[:, 0], waypoints[:, 1],
-            'y--', alpha=0.3, zorder=1
-        )
-        
-        # Plot current waypoint
-        current = waypoints[drone['current_waypoint_index']]
-        self.ax.scatter(
-            current[0], current[1],
-            c='yellow', marker='o', s=50, zorder=2
-        )
-        
-        # Determine drone marker and color based on status
-        if drone['status'] == 'collided':
-            marker = '*'
-            color = 'red'
-        elif drone['status'] == 'successful':
-            marker = 'o'  # Change to circle for successful drones
-            color = 'green'
-        else:
-            marker = '*'  # Star for active drones
-            color = 'green'
-        
-        # Plot current drone position
-        self.drones_scatter[drone_id] = self.ax.scatter(
-            pos[0], pos[1],
-            c=color, marker=marker, s=100, zorder=3
-        )
-        
-        # Update drone trail
-        if drone_id not in self.drone_trails:
-            self.drone_trails[drone_id] = []
-        self._update_drone_trail(drone)
-        
-        # Add info bubble
-        info_text = (
-            f"ID: {drone['id']}\n"
-            f"Speed: {speed:.1f} m/s\n"
-            f"Alt: {pos[2]:.1f}m"
-        )
-        
-        bubble_color = {
-            'collided': 'darkred',
-            'successful': 'darkgreen',
-            'active': 'darkblue'
-        }[drone['status']]
-        
-        self.info_bubbles[drone['id']] = self.ax.annotate(
-            info_text,
-            xy=(pos[0], pos[1]),
-            xytext=(10, 10),
-            textcoords='offset points',
-            bbox=dict(boxstyle='round,pad=0.5', fc=bubble_color, alpha=0.7),
-            fontsize=8,
-            color='white'
-        )
-
-    def _static_plot_setup(self):
-        """
-        Set up static aspects of the plot that don't need to be 
-        re-done every frame (axes labels, grid, legend, etc.).
-        """
-        self.ax.set_xlim(-50, self.dimensions[0] + 50)
-        self.ax.set_ylim(-50, self.dimensions[1] + 50)
-        self.ax.grid(True, linestyle='--', alpha=0.3)
-        self.ax.set_title("Drone Flight Simulation")
-        self.ax.set_xlabel("X Position (m)")
-        self.ax.set_ylabel("Y Position (m)")
-        
-        # Complete legend elements
-        self.legend_elements = [
-            plt.Line2D([0], [0], marker='*', color='none', markerfacecolor='green',
-                    markeredgecolor='white', markersize=10, label='Active Drones'),
-            plt.Line2D([0], [0], marker='*', color='none', markerfacecolor='red',
-                    markeredgecolor='white', markersize=10, label='Collided Drones'),
-            plt.Line2D([0], [0], marker='o', color='none', markerfacecolor='green',
-                    markeredgecolor='white', markersize=10, label='Successful Drones'),
-            plt.Rectangle((0,0), 1, 1, fc='gray', alpha=0.5, label='Buildings'),
-            plt.Line2D([0], [0], linestyle='--', color='lightblue', label='Drone Trail'),
-            plt.Line2D([0], [0], marker='o', color='none', markerfacecolor='blue',
-                    markeredgecolor='white', markersize=10, label='Start Points'),
-            plt.Line2D([0], [0], marker='*', color='none', markerfacecolor='yellow',
-                    markeredgecolor='white', markersize=10, label='Destinations'),
-            plt.Line2D([0], [0], marker='x', color='none', markerfacecolor='none',
-                    markeredgecolor='orange', markersize=10, markeredgewidth=2,
-                    label='Collision Point')
-        ]
-        
-        self.ax.legend(
-            handles=self.legend_elements,
-            loc='center left',
-            bbox_to_anchor=(1.02, 0.5),
-            fontsize=9
-        )
-
-    def _update_time_label(self):
-        """Update simulation time display"""
-        # Use current state time if available, otherwise show 0.0
-        time = self.current_state.time if self.current_state else 0.0
-        time_text = f"Time: {time:.1f}s"
-        
-        # Remove or update existing text object
-        if hasattr(self, 'time_label') and self.time_label is not None:
-            self.time_label.remove()
-        
-        self.time_label = self.fig.text(
-            0.02, 0.02,
-            time_text,
-            fontsize=10,
-            color='white',
-            bbox=dict(facecolor='black', alpha=0.7, edgecolor='none')
-        )
-
-    def _setup_drone_visuals(self, drone: dict) -> None:
-        """Create initial visual elements for a drone"""
-        drone_id = drone['id']
-        pos = drone['position']
-        waypoints = np.array(drone['flight_path'])
-        
-        # Create scatter for drone position
-        self.drones_scatter[drone_id] = self.ax.scatter(
-            pos[0], pos[1],
-            c='green', marker='*', s=100, zorder=3
-        )
-        
-        # Create waypoint markers
-        self.waypoint_markers[drone_id] = {
-            'start': self.ax.scatter(
-                waypoints[0][0], waypoints[0][1],
-                c='blue', marker='o', s=100, zorder=2
-            ),
-            'end': self.ax.scatter(
-                waypoints[-1][0], waypoints[-1][1],
-                c='yellow', marker='*', s=100, zorder=2
-            ),
-            'current': self.ax.scatter(
-                waypoints[0][0], waypoints[0][1],
-                c='yellow', marker='o', s=50, zorder=2
-            )
-        }
-        
-        # Initialize empty trail
-        self.drone_trails[drone_id] = []
-
-    def _get_drone_color(self, status: str) -> str:
-        return {
-            'collided': 'red',
-            'successful': 'green',
-            'active': 'green'
-        }[status]
-
-    def _update_drone_trail(self, drone: dict) -> None:
-        drone_id = drone['id']
-        pos = drone['position']
-        
-        # Add new trail segment
-        if len(self.drone_trails[drone_id]) >= self.max_trail_length:
-            old_line = self.drone_trails[drone_id].pop(0)
-            old_line.remove()
-            
-        line = self.ax.plot(
-            [pos[0]], [pos[1]],
-            color='lightblue',
-            alpha=0.5,
-            linestyle='--'
-        )[0]
-        self.drone_trails[drone_id].append(line)
-
     def _update_collision_markers(self) -> None:
+        """Update collision markers for all collisions that have occurred"""
         # Add new collision markers
         current_collisions = [
             c for c in (self.current_state.drone_collisions + 
@@ -611,6 +347,92 @@ class MatplotlibVisualizer:
             # Store all artists for later removal
             self.collision_artists.extend([marker, warning_circle, label])
 
+    def save_plot(self) -> None:
+        """Save the current plot state to a validated file path"""
+        if not self.current_state:
+            logger.warning("No simulation state available for saving")
+            return
+            
+        try:
+            # Validate output directory first
+            self.output_dir.mkdir(exist_ok=True, parents=True)
+            save_path = self.output_dir / f"sim_state_{self.current_state.time:.1f}s.png"
+            export_path = str(save_path.resolve())  # MANDATORY path conversion
+
+            # Perform actual drawing/saving in one atomic operation
+            with warnings.catch_warnings():  # Ignore closed figure warnings
+                warnings.simplefilter("ignore", RuntimeWarning)
+                self.fig.savefig(export_path, bbox_inches='tight')
+
+            logger.info(f"Successfully saved simulation state to:\n{export_path}")
+            
+        except RuntimeError as e: 
+            if "closed figure" in str(e):
+                logger.debug("Save attempted on closed figure")
+            else:
+                logger.error(f"Matplotlib error: {e}")
+        except PermissionError as pe:
+            logger.critical(f"Permission denied: {pe}")
+        except Exception as e:  # General catch-all
+            logger.error(f"Unexpected error saving plot: {e}")
+            raise  # Preserve stack trace
+
+    def _static_plot_setup(self):
+        """
+        Set up static aspects of the plot that don't need to be 
+        re-done every frame (axes labels, grid, legend, etc.).
+        """
+        self.ax.set_xlim(-50, self.dimensions[0] + 50)
+        self.ax.set_ylim(-50, self.dimensions[1] + 50)
+        self.ax.grid(True, linestyle='--', alpha=0.3)
+        self.ax.set_title("Drone Flight Simulation")
+        self.ax.set_xlabel("X Position (m)")
+        self.ax.set_ylabel("Y Position (m)")
+        
+        # Complete legend elements
+        self.legend_elements = [
+            Line2D([0], [0], marker='*', color='w', markerfacecolor='green',
+                    label='Active Drones', markersize=10, linestyle='None'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='green',
+                    label='Successful Drones', markersize=10, linestyle='None'),
+            Line2D([0], [0], marker='*', color='w', markerfacecolor='red',
+                    label='Collided Drones', markersize=10, linestyle='None'),
+            Line2D([0], [0], marker='o', color='blue',
+                    label='Start Points', markersize=10, linestyle='None'),
+            Line2D([0], [0], marker='*', color='yellow',
+                    label='Destinations', markersize=10, linestyle='None'),
+            Line2D([0], [0], marker='x', color='orange',
+                    label='Collision Point', markersize=10, linestyle='None'),
+            Line2D([0], [0], color='gray', label='Buildings'),
+            Line2D([0], [0], color='lightblue', label='Drone Trail',
+                   linestyle='--')
+        ]
+        
+        self.ax.legend(
+            handles=self.legend_elements,
+            loc='center left',
+            bbox_to_anchor=(1.02, 0.5),
+            fontsize=9
+        )
+
+    def _update_time_label(self):
+        """Update simulation time display"""
+        # Use current state time if available, otherwise show 0.0
+        time = self.current_state.time if self.current_state else 0.0
+        time_text = f"Time: {time:.1f}s"
+        
+        # Remove or update existing text object
+        if hasattr(self, 'time_label') and self.time_label is not None:
+            self.time_label.remove()
+        
+        self.time_label = self.fig.text(
+            0.02, 0.02,
+            time_text,
+            fontsize=10,
+            color='white',
+            bbox=dict(facecolor='black', alpha=0.7, edgecolor='none')
+        )
+
     def _setup_animation(self):
         """Set up the animation timer"""
         self.ani = FuncAnimation(
@@ -620,3 +442,39 @@ class MatplotlibVisualizer:
             blit=False,
             cache_frame_data=False
         )
+
+    def _update_drone_trail(self, drone: dict) -> None:
+        """Update the trail for a single drone"""
+        drone_id = drone['id']
+        pos = drone['position']
+        
+        # Add new trail segment
+        if len(self.drone_trails[drone_id]) >= self.max_trail_length:
+            old_line = self.drone_trails[drone_id].pop(0)
+            old_line.remove()
+            
+        if len(self.drone_trails[drone_id]) > 0:
+            last_line = self.drone_trails[drone_id][-1]
+            last_x_data = last_line.get_xdata()
+            last_y_data = last_line.get_ydata()
+            last_pos = (last_x_data[-1], last_y_data[-1])  # Get the last point
+            
+            line = self.ax.plot(
+                [last_pos[0], pos[0]], 
+                [last_pos[1], pos[1]],
+                color='white',
+                alpha=self.trail_alpha,
+                linewidth=1,
+                zorder=2
+            )[0]
+            self.drone_trails[drone_id].append(line)
+        else:
+            # First point in trail
+            line = self.ax.plot(
+                [pos[0]], [pos[1]],
+                color='grey',
+                alpha=self.trail_alpha,
+                linewidth=1,
+                zorder=2
+            )[0]
+            self.drone_trails[drone_id].append(line)

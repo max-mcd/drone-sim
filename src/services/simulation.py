@@ -6,8 +6,8 @@ from typing import List, Tuple
 
 import numpy as np
 
-from ..models.drone import Drone
 from ..models.building import Building
+from ..models.drone import Drone, DroneStatus
 from ..models.flight_path import FlightPath
 from ..models.simulation_state import SimulationState
 from ..services.state_manager import SimulationStateManager
@@ -18,9 +18,9 @@ from ..utils.config_loader import (
 )
 from ..utils.report_generator import ReportGenerator
 from ..visualization.matplotlib_visualizer import MatplotlibVisualizer
+from .collision_avoidance import CollisionAvoidanceSystem
 from .collision_detector import CollisionDetector
 from .environment import Environment
-from .collision_avoidance import CollisionAvoidanceSystem
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +191,7 @@ class SimulationEngine:
                 self._update_state()
                 
                 # Check if all drones are done
-                if all(drone.status in ['successful', 'collided'] for drone in self.drones):
+                if all(drone.status in [DroneStatus.SUCCESSFUL, DroneStatus.COLLIDED, DroneStatus.BATTERY_DEPLETED] for drone in self.drones):
                     logger.info("All drones have completed their routes")
                     self.simulation_complete = True
                     self._update_state()  # Final state update
@@ -233,11 +233,11 @@ class SimulationEngine:
         # Apply collision avoidance if enabled
         if self.avoid_collisions and self.collision_avoidance:
             for i, drone1 in enumerate(self.drones):
-                if drone1.status != 'active':
+                if drone1.status != DroneStatus.ACTIVE:
                     continue
                 
                 for drone2 in self.drones[i+1:]:
-                    if drone2.status != 'active':
+                    if drone2.status != DroneStatus.ACTIVE:
                         continue
                     
                     # Apply collision avoidance if needed
@@ -254,7 +254,7 @@ class SimulationEngine:
     def _check_collisions(self, drone: Drone) -> None:
         """Check for collisions with other drones and buildings"""
         # Only check actual collisions for active drones
-        if drone.status != 'active':
+        if drone.status != DroneStatus.ACTIVE:
             return
         
         # Check drone-drone collisions
@@ -272,8 +272,8 @@ class SimulationEngine:
 
     def _handle_drone_collision(self, drone1: Drone, drone2: Drone) -> None:
         self.drone_collisions.append((drone1.id, drone2.id, self.time))
-        drone1.status = 'collided'
-        drone2.status = 'collided'
+        drone1.status = DroneStatus.COLLIDED
+        drone2.status = DroneStatus.COLLIDED
         logger.info(f"""
             Drone {drone1.id} and Drone {drone2.id} collided at time {self.time:.1f}s
         """)
@@ -283,7 +283,7 @@ class SimulationEngine:
         # Store building ID (or index if no ID available)
         building_id = getattr(building, 'id', 0)  # Default to 0 if no ID
         self.building_collisions.append((drone.id, building_id, self.time, pos[0], pos[1], pos[2]))
-        drone.status = 'collided'
+        drone.status = DroneStatus.COLLIDED
         logger.info(f"""
             Drone {drone.id} collided with building at ({building.x}, {building.y}) at time {self.time:.1f}s
         """)
