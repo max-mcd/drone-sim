@@ -7,7 +7,15 @@ logger = logging.getLogger(__name__)
 
 
 class StateObserver(Protocol):
-    """Protocol for state observers"""
+    """Protocol for state observers.
+    
+    This protocol defines the interface that state observers must implement to receive
+    state updates from the SimulationStateManager. Observers are notified whenever
+    the simulation state changes and receive the new state object.
+    
+    Required Methods:
+        on_state_update: Called when state changes with new SimulationState object
+    """
     def on_state_update(self, state: SimulationState) -> None: ...
 
 

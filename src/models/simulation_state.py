@@ -1,34 +1,34 @@
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Protocol
 
 from .building import Building
 from .drone import Drone
 from .collision import CollisionRecord
 
 
+class SimulationEntity(Protocol):
+    """Protocol for entities that can be serialized to state"""
+    def to_dict(self) -> Dict: ...
+
+
 @dataclass
 class SimulationState:
-    """Represents the complete state of the simulation at a point in time.
+    """Current state of the simulation.
     
-    Attributes:
-        time: Current simulation time in seconds
-        drones: List of drone states containing position, velocity, waypoints, etc.
-        buildings: List of building objects in the simulation
-        collisions: List of collision records
+    Provides a consistent snapshot of:
+    - Simulation time
+    - All entity positions and states
+    - Collision records
     """
     time: float
-    drones: List[Dict[str, Union[int, List[float], bool, str]]]
-    buildings: List[Building]
-    collisions: List[CollisionRecord]
+    drones: List[Dict]  # Already serialized
+    buildings: List[Dict]  # Keep as Building objects for visualization
+    collisions: List[Dict]  # Now serialized
 
     def __init__(self, time: float, drones: List[Drone], buildings: List[Building],
                  collisions: List[CollisionRecord]):
-        """Initialize simulation state.
-        
-        Converts Drone objects to dictionary format for visualization while keeping
-        Building objects intact for direct property access.
-        """
+        """Initialize state, converting all entities to dicts"""
         self.time = time
         self.drones = [drone.to_dict() for drone in drones]
-        self.buildings = buildings
-        self.collisions = collisions
+        self.buildings = [building.to_dict() for building in buildings]
+        self.collisions = [collision.to_dict() for collision in collisions]

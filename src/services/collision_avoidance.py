@@ -8,6 +8,20 @@ from .collision_detector import CollisionDetector
 logger = logging.getLogger(__name__)
 
 class CollisionAvoidanceSystem:
+    """Manages collision avoidance between drones in the simulation.
+    
+    This system:
+    - Detects potential collisions using the CollisionDetector
+    - Determines which drone should yield in potential collision scenarios
+    - Calculates safe speeds and trajectories for collision avoidance
+    - Applies avoidance maneuvers while maintaining safety buffers
+    
+    The avoidance logic uses a hierarchical decision system considering:
+    - Emergency status (future capability) 
+    - Vertical separation between drones
+    - Progress towards destination
+    - Drone ID comparison as final tiebreaker
+    """
     def __init__(self, time_horizon: float = 5.0):
         """Initialize collision avoidance system"""
         self.detector = CollisionDetector(time_horizon=time_horizon)
@@ -57,7 +71,22 @@ class CollisionAvoidanceSystem:
         passing_drone: Drone,
         required_separation: float
     ) -> float:
-        """Calculate safe speed for yielding drone"""
+        """Calculate safe speed for yielding drone to maintain safe separation.
+        
+        Uses time and distance of closest approach to determine appropriate speed reduction.
+        Applies progressively more aggressive slowdown as separation distance decreases:
+        - Normal slowdown when within required separation
+        - Cubic slowdown within 75% of required separation  
+        - Emergency brake (50% additional reduction) within 60% of required separation
+        
+        Args:
+            yielding_drone: The drone that should yield
+            passing_drone: The drone being yielded to
+            required_separation: Minimum required separation distance in meters
+            
+        Returns:
+            float: Safe speed in m/s for yielding drone
+        """
         # Get time and distance of closest approach
         time_to_closest, min_distance = self.detector.calculate_closest_approach(
             yielding_drone, passing_drone
@@ -103,7 +132,16 @@ class CollisionAvoidanceSystem:
         return yielding_drone.model.max_speed
         
     def resolve_conflict(self, drone1: Drone, drone2: Drone) -> None:
-        """Resolve potential collision between two drones"""
+        """Resolve potential collision between two drones by:
+        1. Checking if collision avoidance is needed based on future trajectory
+        2. Determining which drone should yield based on priority rules
+        3. Calculating required separation distance between drones
+        4. Computing and applying speed adjustments to the yielding drone
+        
+        Args:
+            drone1: First drone to check for collision
+            drone2: Second drone to check for collision
+        """
         # Check if avoidance is needed
         collision_time = self.detector.check_future_collision(drone1, drone2)
         if collision_time is None:

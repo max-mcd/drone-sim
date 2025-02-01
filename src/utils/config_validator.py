@@ -1,27 +1,24 @@
-CITIES_SCHEMA = {
-    "type": "object",
-    "required": ["cities"],
-    "properties": {
-        "cities": {
-            "type": "object",
-            "minProperties": 1,
-            "patternProperties": {
-                "^[A-Za-z ]+$": {
-                    "type": "object",
-                    "required": [
-                        "building_density_per_km2",
-                        "avg_height_m",
-                        "population_density_per_km2",
-                        "takeoff_landing_locations_count"
-                    ],
-                    "properties": {
-                        "building_density_per_km2": {"type": "integer", "minimum": 0},
-                        "avg_height_m": {"type": "number", "minimum": 0},
-                        "population_density_per_km2": {"type": "integer", "minimum": 0},
-                        "takeoff_landing_locations_count": {"type": "integer", "minimum": 1}
-                    }
-                }
-            }
-        }
-    }
-} 
+import json
+import os
+from pathlib import Path
+from jsonschema import validate
+from typing import Any
+
+def load_schema(schema_name: str) -> dict:
+    """Load a JSON schema file from the schemas directory."""
+    schema_path = Path(__file__).parent.parent / 'schemas' / f'{schema_name}.json'
+    with open(schema_path) as f:
+        return json.load(f)
+
+def validate_city_config(config_data: dict) -> None:
+    """Validate city configuration data against the cities schema."""
+    schema = load_schema('cities')
+    validate(instance=config_data, schema=schema)
+
+def validate_config_file(file_path: str, schema_name: str) -> dict:
+    """Load and validate any configuration file against a named schema."""
+    with open(file_path) as f:
+        config_data = json.load(f)
+    schema = load_schema(schema_name)
+    validate(instance=config_data, schema=schema)
+    return config_data

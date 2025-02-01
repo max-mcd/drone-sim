@@ -4,8 +4,22 @@ import numpy as np
 
 
 class FlightPath:
-    """Manages a sequence of waypoints for a drone's flight"""
+    """Manages a sequence of waypoints for a drone's flight.
+
+    A flight path consists of ordered 3D waypoints that a drone must visit.
+    The path includes:
+    - Start point (first waypoint)
+    - Optional intermediate waypoints
+    - Destination (final waypoint)
     
+    Waypoint Navigation:
+    - Drones fly directly toward their current waypoint
+    - A waypoint is considered "reached" when within threshold distance
+    - Speed reduces gradually when approaching waypoints
+    - After reaching a waypoint, drone advances to next in sequence
+
+    """
+        
     def __init__(self, waypoints: List[np.ndarray]) -> None:
         """Initialize flight path with waypoints
         
@@ -34,13 +48,25 @@ class FlightPath:
             return self.waypoints[self.current_index + 1]
         return None
         
+    def is_nearing_waypoint(self, position: np.ndarray, threshold: float = 1.0) -> bool:
+        """Check if position is close to current waypoint
+        
+        Args:
+            position: Current position to check
+            threshold: Distance threshold in meters
+            
+        Returns:
+            True if within threshold distance of waypoint
+        """
+        return np.linalg.norm(position - self.current_waypoint) < threshold
+        
     def advance_waypoint(self) -> bool:
-        """Advance to next waypoint if available
+        """Move to next waypoint if available
         
         Returns:
-            True if advanced to next waypoint, False if at end
+            False if at final waypoint, True otherwise
         """
-        if self.current_index < len(self.waypoints) - 1:
+        if self.current_index + 1 < len(self.waypoints):
             self.current_index += 1
             return True
-        return False 
+        return False

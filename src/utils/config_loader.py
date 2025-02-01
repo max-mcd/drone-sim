@@ -47,6 +47,7 @@ def validate_drone_positions(drone_configs: List[dict]) -> None:
         # Validate unique starting positions
         start_pos = tuple(config['waypoints'][0])
         if start_pos in start_positions:
+            
             raise ValueError(f"Invalid configuration: Drone {i} and {start_positions[start_pos]} share starting position {start_pos}")
         start_positions[start_pos] = i
 
@@ -66,6 +67,7 @@ def load_simulation_config(path: str) -> dict:
 
 
 def load_drone_models(path: str) -> Dict[str, DroneModel]:
+    """Load drone models from JSON file and create DroneModel objects"""
     with open(path) as f:
         data = json.load(f)
     return {

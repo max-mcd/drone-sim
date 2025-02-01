@@ -33,7 +33,22 @@ class CollisionDetector:
         logger.info(f"Collision detector initialized: horizon={time_horizon:.1f}s, steps={prediction_steps}")
         
     def check_drone_collision(self, drone1: Drone, drone2: Drone) -> bool:
-        """Check for immediate collision between two drones"""
+        """Check for immediate collision between two drones.
+        
+        Compares the positions of two drones and determines if they are within collision range.
+        Uses different collision buffers based on whether either drone is actively yielding:
+        - Smaller buffer (1.5x drone size + 10m) if yielding is active
+        - Larger buffer (2.0x drone size + 15m) if no yielding
+        
+        Also checks vertical separation must be less than 30m for collision to occur.
+        
+        Args:
+            drone1: First drone to check
+            drone2: Second drone to check
+            
+        Returns:
+            bool: True if drones are within collision range, False otherwise
+        """
         if drone1.status == DroneStatus.COLLIDED or drone2.status == DroneStatus.COLLIDED:
             return False
 
@@ -73,7 +88,24 @@ class CollisionDetector:
 
     @staticmethod
     def check_building_collision(drone: Drone, building: Building) -> bool:
-        """Check for collision between drone and building"""
+        """Check for collision between drone and building.
+        
+        Checks if a drone's position intersects with a building's bounds, accounting for:
+        - Drone dimensions (length, width, height) 
+        - Building dimensions (width, length, height)
+        - Building position (x, y coordinates)
+        
+        The building bounds are expanded by half the drone's dimensions to create
+        a collision envelope. A collision occurs if the drone's center position
+        falls within this expanded envelope.
+        
+        Args:
+            drone: The drone to check for collision
+            building: The building to check for collision with
+            
+        Returns:
+            bool: True if drone intersects with building bounds, False otherwise
+        """
         # Skip if drone has already collided
         if drone.status == DroneStatus.COLLIDED:
             return False
@@ -96,7 +128,25 @@ class CollisionDetector:
         return in_x_bounds and in_y_bounds and in_z_bounds
 
     def check_future_collision(self, drone1: Drone, drone2: Drone) -> Optional[float]:
-        """Check if two drones will collide within the time horizon"""
+        """Check if two drones will collide within the time horizon.
+        
+        Predicts future positions of both drones at multiple time steps and checks for:
+        - Horizontal separation less than required safety distance
+        - Vertical separation less than 30m threshold
+        
+        The prediction uses:
+        - Current position and velocity of each drone
+        - Configurable time horizon and number of prediction steps
+        - Maximum safety buffer between the drones
+        
+        Args:
+            drone1: First drone to check
+            drone2: Second drone to check
+            
+        Returns:
+            Optional[float]: Time to collision in seconds if collision predicted,
+                           None if no collision within time horizon
+        """
         if drone1.status != DroneStatus.ACTIVE or drone2.status != DroneStatus.ACTIVE:
             return None
         
@@ -154,10 +204,21 @@ class CollisionDetector:
         drone1: Drone,
         drone2: Drone
     ) -> Tuple[float, float]:
-        """Calculate time and distance of closest approach
+        """Calculate time and distance of closest approach between two drones.
         
+        Uses relative motion analysis to find when drones will be at their closest point:
+        1. Calculates relative position and velocity vectors between drones
+        2. Finds time of closest approach using dot product formula
+        3. Constrains time to be within time horizon
+        4. Predicts drone positions at closest approach
+        5. Calculates minimum separation distance
+        
+        Args:
+            drone1: First drone to analyze
+            drone2: Second drone to analyze
+            
         Returns:
-            Tuple of (time to closest approach, minimum distance)
+            Tuple of (time to closest approach in seconds, minimum distance in meters)
         """
         pos1 = drone1.position
         pos2 = drone2.position

@@ -4,6 +4,22 @@ import logging
 logger = logging.getLogger(__name__)
 
 class DroneModel:
+    """Represents a specific drone model's physical and performance characteristics.
+    
+    This class encapsulates all the key specifications and capabilities of a drone model:
+    - Physical dimensions (length, width, height)
+    - Performance limits (speed, altitude, range)
+    - Safety parameters (deceleration, safety buffers)
+    - Operating specs (payload capacity, battery life)
+    
+    The model serves as a template for creating drone instances in the simulation,
+    ensuring consistent behavior based on real-world limitations.
+    
+    Safety features:
+    - Calculates minimum safety buffers for collision avoidance
+    - Accounts for braking distance, response time, and physical size
+    - Enforces maximum speed and altitude limits
+    """
     # Safety buffer calculation constants
     SAFETY_CALCULATION = {
         'response_time': 0.5,        # Time to respond to potential collision (seconds)
@@ -32,12 +48,17 @@ class DroneModel:
         self.battery_life = model_data['battery_life_hours'] 
 
     def calculate_safety_buffer(self) -> float:
-        """Calculate minimum safety distance based on drone capabilities"""
-        # Buffer components:
-        # 1. Braking distance (v²/2a) - distance needed to stop
-        # 2. Response time buffer (v * t) - distance covered during system response
-        # 3. Physical size buffer - based on drone dimensions
-        # 4. Base separation - minimum safe distance
+        """Calculate minimum safety distance based on drone capabilities.
+        
+        Calculates a safety buffer distance that accounts for multiple factors:
+        - Braking distance: Distance needed to come to a complete stop (v²/2a)
+        - Response buffer: Distance covered during system response time (v * t) 
+        - Physical buffer: Margin based on drone's physical dimensions
+        - Base separation: Minimum required separation distance
+        
+        Returns:
+            float: Total safety buffer distance in meters
+        """
         
         braking_distance = (self.max_speed ** 2) / (2 * self.max_deceleration)
         response_buffer = self.max_speed * self.SAFETY_CALCULATION['response_time']

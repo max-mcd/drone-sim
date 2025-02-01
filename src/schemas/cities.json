@@ -1,0 +1,27 @@
+{
+    "type": "object",
+    "required": ["cities"],
+    "properties": {
+        "cities": {
+            "type": "object",
+            "minProperties": 1,
+            "patternProperties": {
+                "^[A-Za-z ]+$": {
+                    "type": "object",
+                    "required": [
+                        "building_density_per_km2",
+                        "avg_height_m",
+                        "population_density_per_km2",
+                        "takeoff_landing_locations_count"
+                    ],
+                    "properties": {
+                        "building_density_per_km2": {"type": "integer", "minimum": 0},
+                        "avg_height_m": {"type": "number", "minimum": 0},
+                        "population_density_per_km2": {"type": "integer", "minimum": 0},
+                        "takeoff_landing_locations_count": {"type": "integer", "minimum": 1}
+                    }
+                }
+            }
+        }
+    }
+}

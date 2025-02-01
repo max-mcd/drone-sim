@@ -18,23 +18,36 @@ logging.getLogger('PIL.PngImagePlugin').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
 class MatplotlibVisualizer:
-    """2D visualization of the drone simulation using matplotlib
-    
+    """2D visualization of the drone simulation using matplotlib.
+
+    Provides real-time visualization of drone flights, building layouts, and simulation metrics.
+
     Visualization features:
-    1. Real-time drone position and status tracking
-    2. Building layout visualization
-    3. Collision detection visualization
-    4. Flight path and waypoint tracking
-    5. Performance metrics display
-    6. Dynamic legend and status indicators
+        - Real-time drone position and status tracking: Shows current location and state of each drone
+        - Building layout visualization: Displays 2D projections of buildings in the simulation space
+        - Collision detection visualization: Highlights collisions between drones and with buildings
+        - Flight path and waypoint tracking: Shows planned routes and progress of each drone
+        - Performance metrics display: Real-time stats like simulation time and drone counts
+        - Dynamic legend and status indicators: Color-coded markers showing drone states
+
+    The visualizer updates in real-time when real_time=True, or runs faster without display updates
+    when real_time=False.
     """
     
     def __init__(self, dimensions: Tuple[float, float, float], real_time: bool = True):
-        """Initialize the visualizer with given dimensions and mode
+        """Initialize the visualizer with given dimensions and mode.
+        
+        The visualizer provides real-time visualization of:
+        - Drone positions and status (using color-coded markers)
+        - Building layouts (as 2D projections)
+        - Flight paths and waypoints
+        - Collision detection
+        - Performance metrics
         
         Args:
-            dimensions: (width, length, height) of simulation space
-            real_time: If True, updates display in real-time. If False, runs faster
+            dimensions: (width, length, height) tuple defining simulation space dimensions in meters
+            real_time: If True, updates display in real-time. If False, runs without display updates
+                      for faster simulation speed
         """
         
         # Use Agg backend if not in main thread
@@ -259,7 +272,7 @@ class MatplotlibVisualizer:
             # Initialize buildings on first state
             if not self.received_first_state:
                 self.received_first_state = True
-                self._initialize_building_patches(state.buildings)
+                self._create_building_patches(state.buildings)
                 
                 # Add building patches to plot
                 for patch in self.building_patches:
@@ -278,26 +291,23 @@ class MatplotlibVisualizer:
         except Exception as e:
             logger.error(f"State update failed: {e}")
 
-    def _initialize_building_patches(self, buildings: List[Building]) -> None:
-        """Create building patches once during initialization"""
-        logger.debug(f"Initializing {len(buildings)} building patches")
+    def _create_building_patches(self, buildings):
+        """Create rectangle patches for buildings"""
         self.building_patches = []
         
         for i, building in enumerate(buildings):
             try:
+                # Create rectangle patch for building footprint
                 rect = plt.Rectangle(
-                    (building.x - building.width/2,  # Direct property access
-                     building.y - building.length/2),
-                    building.width,
-                    building.length,
+                    (building['x'] - building['width']/2, building['y'] - building['length']/2),
+                    building['width'],
+                    building['length'],
                     color='gray',
                     alpha=0.5,
                     zorder=1
                 )
+                self.ax.add_patch(rect)
                 self.building_patches.append(rect)
-                if i < 5:  # Log first few buildings for verification
-                    logger.debug(f"Building {i}: pos=({building.x}, {building.y}), "
-                               f"size={building.width}x{building.length}")
             except Exception as e:
                 logger.error(f"Failed to create building {i}: {e}")
         
@@ -311,19 +321,19 @@ class MatplotlibVisualizer:
         # Add new collision markers
         current_collisions = [
             c for c in self.current_state.collisions
-            if c.timestamp <= self.current_state.time
+            if c['timestamp'] <= self.current_state.time
         ]
         
         for collision in current_collisions:
-            if collision.collision_type == 'building':
-                x, y = collision.position[0], collision.position[1]  # Get collision coordinates
+            if collision['collision_type'] == 'building':
+                x, y = collision['position'][0], collision['position'][1]  # Get collision coordinates
                 color = 'orange'  # Different color for building collisions
-                collision_time = collision.timestamp
+                collision_time = collision['timestamp']
             else:  # Drone collision
-                drone1 = next(d for d in self.current_state.drones if d['id'] == collision.drone_id)
+                drone1 = next(d for d in self.current_state.drones if d['id'] == collision['drone_id'])
                 x, y = drone1['position'][0], drone1['position'][1]
                 color = 'red'
-                collision_time = collision.timestamp
+                collision_time = collision['timestamp']
             
             # Plot collision marker
             marker = self.ax.scatter(

@@ -2,7 +2,18 @@
 import numpy as np
 
 class AvoidanceSystem:
-    """Manages temporary velocity modifications for collision avoidance"""
+    """Manages temporary velocity modifications for collision avoidance.
+    
+    This system allows drones to temporarily modify their velocity vectors to avoid collisions.
+    When active, it maintains a modified velocity for a specified duration, then reverts
+    to normal flight behavior.
+    
+    Key features:
+    - Tracks active avoidance state
+    - Maintains temporary velocity vector
+    - Times the duration of avoidance maneuvers
+    - Automatically deactivates after duration expires
+    """
     
     def __init__(self):
         self.active = False

@@ -226,7 +226,16 @@ class SimulationEngine:
             logger.error(f"Error during simulation: {e}", exc_info=True)
 
     def _update_drones(self, dt: float) -> None:
-        """Update all drone positions and check for collisions"""
+        """Update all drone positions and check for collisions.
+        
+        This method:
+        1. Applies collision avoidance logic between active drones if enabled
+        2. Updates positions and states of all drones
+        3. Checks for actual collisions after movement
+        
+        Args:
+            dt: Time step in seconds for the update
+        """
         # Apply collision avoidance if enabled
         if self.avoid_collisions and self.collision_avoidance:
             for i, drone1 in enumerate(self.drones):
@@ -249,7 +258,18 @@ class SimulationEngine:
             self._check_collisions(drone)
 
     def _check_collisions(self, drone: Drone) -> None:
-        """Check for collisions with other drones and buildings"""
+        """Check for collisions with other drones and buildings.
+        
+        This method checks if the given drone has collided with:
+        1. Any other active drones in the simulation
+        2. Any buildings in the current city environment
+        
+        When a collision is detected, it triggers the appropriate collision handler
+        which records the collision and updates drone status.
+        
+        Args:
+            drone: The drone to check for collisions
+        """
         # Only check actual collisions for active drones
         if drone.status != DroneStatus.ACTIVE:
             return
@@ -268,6 +288,14 @@ class SimulationEngine:
                 return
 
     def _handle_drone_collision(self, drone1: Drone, drone2: Drone) -> None:
+        """Handle a collision between two drones.
+        
+        This method records the collision and updates the status of the involved drones.
+        
+        Args:
+            drone1: First drone involved in the collision   
+            drone2: Second drone involved in the collision
+        """
         collision = CollisionRecord.from_drone_collision(drone1.id, drone2.id, self.time)
         self.collisions.append(collision)
         drone1.status = DroneStatus.COLLIDED
@@ -277,6 +305,14 @@ class SimulationEngine:
         """)
 
     def _handle_building_collision(self, drone: Drone, building: Building) -> None:
+        """Handle a collision between a drone and a building.
+        
+        This method records the collision and updates the status of the drone.
+        
+        Args:
+            drone: The drone involved in the collision  
+            building: The building involved in the collision
+        """
         pos = drone.position
         collision = CollisionRecord.from_building_collision(
             drone.id, 

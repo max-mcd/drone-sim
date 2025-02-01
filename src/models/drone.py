@@ -16,6 +16,31 @@ class DroneStatus(Enum):
     BATTERY_DEPLETED = 'battery_depleted'
 
 class Drone:
+    """Represents an individual drone in the simulation.
+    
+    This class manages a drone's state and behavior including:
+    - Position and velocity tracking
+    - Flight path following
+    - Collision avoidance
+    - Battery monitoring
+    - Status updates
+    
+    The drone follows a flight path while respecting its model's physical limitations
+    and avoiding collisions with other drones and buildings.
+    
+    Attributes:
+        id (int): Unique identifier for this drone
+        model (DroneModel): Physical specifications and capabilities
+        position (np.ndarray): Current 3D position [x,y,z]
+        velocity (np.ndarray): Current 3D velocity vector
+        status (DroneStatus): Current operational status
+        battery_remaining (float): Remaining battery life in seconds
+        travel_time (float): Total flight time in seconds
+        start_pos (np.ndarray): Starting position
+        destination (np.ndarray): Target destination
+        flight_path (FlightPath): Path planning system
+        successful (bool): Whether mission was completed successfully
+    """
     def __init__(self, id: int, model: DroneModel, start: np.ndarray, 
                  destination: np.ndarray, flight_path: FlightPath):
         self.id = id
@@ -95,7 +120,7 @@ class Drone:
             Status: {self.status}
         """)
         
-        if distance < 1.0:  # Reached waypoint
+        if self.flight_path.is_nearing_waypoint(self.position):  # Reached waypoint
             if not self.flight_path.advance_waypoint():
                 self.successful = True
                 self.status = DroneStatus.SUCCESSFUL

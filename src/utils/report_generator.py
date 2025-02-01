@@ -137,9 +137,7 @@ BUILDING COLLISIONS:
         # Save report
         report_path = self.output_dir / f"simulation_report_{simulation_time:.1f}s.txt"
         with open(report_path, 'w') as f:
-            f.write("="*50 + "\n")
-            f.write("Simulation Report\n")
-            f.write("="*50 + "\n")
+
             f.write(report)
 
         return (report_path, report) 
