@@ -4,6 +4,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 class DroneModel:
+    # Safety buffer calculation constants
+    SAFETY_CALCULATION = {
+        'response_time': 0.5,        # Time to respond to potential collision (seconds)
+        'physical_buffer_multiplier': 1.5,  # Multiplier for physical dimensions
+        'base_separation': 15.0      # Minimum separation distance (meters)
+    }
+
     def __init__(self, model_data: dict):
         """Initialize drone model from configuration data"""
         self.name = model_data['name']
@@ -33,21 +40,20 @@ class DroneModel:
         # 4. Base separation - minimum safe distance
         
         braking_distance = (self.max_speed ** 2) / (2 * self.max_deceleration)
-        response_buffer = self.max_speed * 0.5  # 0.5s response time
-        physical_buffer = max(self.dimensions['length'], 
-                             self.dimensions['width']) * 1.5  # 150% of largest dimension
-        base_separation = 15.0  # Increased minimum separation
+        response_buffer = self.max_speed * self.SAFETY_CALCULATION['response_time']
+        physical_size = max(self.dimensions['length'], self.dimensions['width'])
+        base_separation = self.SAFETY_CALCULATION['base_separation']
         
         total_buffer = (braking_distance + 
                        response_buffer + 
-                       physical_buffer + 
+                       physical_size * self.SAFETY_CALCULATION['physical_buffer_multiplier'] + 
                        base_separation)
         
         logger.debug(f"""
             Safety buffer calculation for {self.name}:
             Braking distance: {braking_distance:.1f}m
             Response buffer: {response_buffer:.1f}m
-            Physical buffer: {physical_buffer:.1f}m
+            Physical buffer: {physical_size:.1f}m
             Base separation: {base_separation:.1f}m
             Total buffer: {total_buffer:.1f}m
         """)

@@ -1,8 +1,8 @@
-import json
 from typing import List, Tuple
 
 import numpy as np
 
+from ..utils.config_loader import load_city_data
 from ..models.building import Building
 from ..models.city_data import CityData
 
@@ -41,46 +41,25 @@ class Environment:
     systems and flight planning algorithms.
     """
     def __init__(self, city_data_path: str, dimensions: Tuple[float, float, float]):
-        with open(city_data_path) as f:
-            self.city_data = json.load(f)
         self.dimensions = dimensions
+        self.city_data_path = city_data_path
         self.current_city = None
 
     def set_city(self, city_name: str) -> None:
-        """Set the current city by name and generate its layout"""
-        if city_name not in self.city_data['cities']:
-            raise ValueError(f"City {city_name} not found")
-            
-        city_info = self.city_data['cities'][city_name]
-        buildings = self._generate_buildings(
-            density=int(city_info['building_density_per_km2']),
-            avg_height=float(city_info['avg_height_m']),
-            dimensions=self.dimensions
-        )
-        
+        """Set the current city configuration"""
+        city_data = load_city_data(self.city_data_path, city_name)
         self.current_city = CityData(
             name=city_name,
-            building_density=int(city_info['building_density_per_km2']),
-            avg_height=float(city_info['avg_height_m']),
-            population_density=int(city_info['population_density_per_km2']),
-            takeoff_locations=int(city_info['takeoff_landing_locations_count']),
-            buildings=buildings
-        )
-
-    def _generate_city(self, city_data: dict, city_name: str) -> CityData:
-        """Generate a city from the provided parameters"""
-        buildings = self._generate_buildings(
-            int(city_data['building_density_per_km2']),
-            float(city_data['avg_height_m']),
-            self.dimensions
-        )
-        return CityData(
-            name=city_name,
-            building_density=int(city_data['building_density_per_km2']),
-            avg_height=float(city_data['avg_height_m']),
-            population_density=int(city_data['population_density_per_km2']),
-            takeoff_locations=int(city_data['takeoff_landing_locations_count']),
-            buildings=buildings
+            building_density=city_data['building_density_per_km2'],
+            avg_height=city_data['avg_height_m'],
+            population_density=city_data['population_density_per_km2'],
+            takeoff_locations=city_data['takeoff_landing_locations_count'],
+            buildings=self._generate_buildings(
+                density=city_data['building_density_per_km2'],
+                avg_height=city_data['avg_height_m'],
+                dimensions=self.dimensions
+            ),
+            dimensions=self.dimensions
         )
 
     def _generate_buildings(self, density: int, avg_height: float, dimensions: Tuple[float, float, float]) -> List[Building]:

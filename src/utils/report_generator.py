@@ -1,11 +1,19 @@
 from typing import List, Tuple
+from pathlib import Path
 
 from tabulate import tabulate
+
+from ..models.drone import Drone
+from ..models.collision import CollisionRecord
 
 
 class ReportGenerator:
     """Helper class to generate formatted simulation reports"""
     
+    def __init__(self, output_dir: Path):
+        self.output_dir = output_dir
+        self.output_dir.mkdir(exist_ok=True, parents=True)
+
     @staticmethod
     def generate_report(
         city_name: str,
@@ -94,4 +102,44 @@ BUILDING COLLISIONS:
             headers=["Drone", "Building", "Time", "X", "Y", "Z"],
             tablefmt="simple_grid",
             numalign="center"
-        ) 
+        )
+
+    @staticmethod
+    def _count_successful_flights(drones: List[Drone]) -> int:
+        return sum(1 for drone in drones if drone.successful)
+
+    @staticmethod
+    def _calculate_avg_travel_time(drones: List[Drone]) -> float:
+        successful_times = [d.travel_time for d in drones if d.successful]
+        return sum(successful_times) / len(successful_times) if successful_times else 0.0
+
+    def generate_and_save_report(self, drones: List[Drone], city_name: str,
+                                simulation_time: float, 
+                                collisions: List[CollisionRecord],
+                                building_count: int) -> Tuple[Path, str]:
+        """Generate simulation report and save to file"""
+        
+        # Count collisions by type
+        num_drone_collisions = len([c for c in collisions if c.collision_type == 'drone'])
+        num_building_collisions = len([c for c in collisions if c.collision_type == 'building'])
+
+        report = self.generate_report(
+            city_name=city_name,
+            simulation_time=simulation_time,
+            total_flights=len(drones),
+            successful_flights=self._count_successful_flights(drones),
+            avg_travel_time=self._calculate_avg_travel_time(drones),
+            drone_collisions=[(c.drone_id, c.other_id, c.timestamp) for c in collisions if c.collision_type == 'drone'],
+            building_collisions=[(c.drone_id, c.other_id, c.timestamp, *c.position) for c in collisions if c.collision_type == 'building'],
+            building_count=building_count
+        )
+
+        # Save report
+        report_path = self.output_dir / f"simulation_report_{simulation_time:.1f}s.txt"
+        with open(report_path, 'w') as f:
+            f.write("="*50 + "\n")
+            f.write("Simulation Report\n")
+            f.write("="*50 + "\n")
+            f.write(report)
+
+        return (report_path, report) 

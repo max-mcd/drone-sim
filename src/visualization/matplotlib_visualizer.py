@@ -70,15 +70,15 @@ class MatplotlibVisualizer:
         # Initialize marker mapping
         self.drone_markers = {
             DroneStatus.ACTIVE: '*',           # Star for active drones
-            DroneStatus.SUCCESSFUL: 'o',       # Circle for successful drones
-            DroneStatus.COLLIDED: '*',         # Star for collided drones (changed from 'x')
+            DroneStatus.SUCCESSFUL.value: 'o',  # Need to use .value since status comes from dict
+            DroneStatus.COLLIDED: '*',         # Star for collided drones
             DroneStatus.BATTERY_DEPLETED: 's'  # Square for battery depleted
         }
         
         # Initialize color scheme
         self.status_colors = {
             DroneStatus.ACTIVE: 'green',        # Green for active drones
-            DroneStatus.SUCCESSFUL: 'green',     # Green for success
+            DroneStatus.SUCCESSFUL.value: 'green', # Need to use .value to match status from dict
             DroneStatus.COLLIDED: 'red',        # Red for collisions
             DroneStatus.BATTERY_DEPLETED: 'orange'
         }
@@ -117,7 +117,7 @@ class MatplotlibVisualizer:
         """Update dynamic elements without clearing the plot"""
         if self.is_drawing or not self.current_state:
             return
-            
+        
         try:
             self.is_drawing = True
             
@@ -202,8 +202,17 @@ class MatplotlibVisualizer:
                 self.waypoint_markers[drone['id']] = True
             
             # Get marker and status-based color
-            marker = self.drone_markers.get(drone['status'], self.drone_markers[DroneStatus.ACTIVE])
-            status_color = self.status_colors.get(drone['status'], self.status_colors[DroneStatus.ACTIVE])
+            status = DroneStatus(drone['status'])  # Convert string to enum
+            marker = self.drone_markers.get(status, self.drone_markers[DroneStatus.ACTIVE])
+            status_color = self.status_colors.get(status, self.status_colors[DroneStatus.ACTIVE])
+            
+            # Get bubble color based on status
+            bubble_color = {
+                DroneStatus.ACTIVE.value: 'blue',
+                DroneStatus.SUCCESSFUL.value: 'green',
+                DroneStatus.COLLIDED.value: 'red',
+                DroneStatus.BATTERY_DEPLETED.value: 'orange'
+            }.get(drone['status'], 'blue')
             
             # Plot drone position with status color
             self.drones_scatter[drone['id']] = self.ax.scatter(
@@ -214,7 +223,7 @@ class MatplotlibVisualizer:
                 zorder=3
             )
             
-            # Add info bubble with status color
+            # Add info bubble with status-specific color
             info_text = (
                 f"ID: {drone['id']}\n"
                 f"Speed: {np.linalg.norm(drone['velocity']):.1f} m/s\n"
@@ -226,9 +235,9 @@ class MatplotlibVisualizer:
                 xy=(drone['position'][0], drone['position'][1]),
                 xytext=(10, 10),
                 textcoords='offset points',
-                bbox=dict(boxstyle='round,pad=0.5', fc=status_color, alpha=0.7),
+                bbox=dict(boxstyle='round,pad=0.5', fc=bubble_color, alpha=0.7),
                 fontsize=8,
-                color='black'
+                color='white'
             )
             
             # Update drone trail with drone-specific color
@@ -239,6 +248,11 @@ class MatplotlibVisualizer:
     def on_state_update(self, state: SimulationState) -> None:
         """Handle new simulation state update"""
         try:
+            # Check if figure is still valid
+            if self.fig is None or not plt.fignum_exists(self.fig.number):
+                logger.debug("Skipping state update - figure was closed")
+                return
+            
             # Store current state
             self.current_state = state
             
@@ -258,7 +272,7 @@ class MatplotlibVisualizer:
                 self.fig.canvas.flush_events()
             
             # Check if simulation is complete
-            if all(drone['status'] in ['successful', 'collided'] for drone in state.drones):
+            if all(drone['status'] in [DroneStatus.SUCCESSFUL.value, DroneStatus.COLLIDED.value] for drone in state.drones):
                 self.save_plot()
             
         except Exception as e:
@@ -296,23 +310,20 @@ class MatplotlibVisualizer:
         """Update collision markers for all collisions that have occurred"""
         # Add new collision markers
         current_collisions = [
-            c for c in (self.current_state.drone_collisions + 
-                       self.current_state.building_collisions)
-            if c[2] <= self.current_state.time
+            c for c in self.current_state.collisions
+            if c.timestamp <= self.current_state.time
         ]
         
         for collision in current_collisions:
-            # Building collisions have 6 elements (drone_id, building_id, time, x, y, z)
-            # Drone collisions have 3 elements (drone1_id, drone2_id, time)
-            if len(collision) == 6:  # Building collision
-                x, y = collision[3], collision[4]  # Get collision coordinates
+            if collision.collision_type == 'building':
+                x, y = collision.position[0], collision.position[1]  # Get collision coordinates
                 color = 'orange'  # Different color for building collisions
-                collision_time = collision[2]
+                collision_time = collision.timestamp
             else:  # Drone collision
-                drone1 = next(d for d in self.current_state.drones if d['id'] == collision[0])
+                drone1 = next(d for d in self.current_state.drones if d['id'] == collision.drone_id)
                 x, y = drone1['position'][0], drone1['position'][1]
                 color = 'red'
-                collision_time = collision[2]
+                collision_time = collision.timestamp
             
             # Plot collision marker
             marker = self.ax.scatter(
@@ -334,7 +345,7 @@ class MatplotlibVisualizer:
                 zorder=2
             )
             self.ax.add_patch(warning_circle)
-            
+
             # Add collision time label
             label = self.ax.text(
                 x, y - 15,
@@ -353,29 +364,34 @@ class MatplotlibVisualizer:
             logger.warning("No simulation state available for saving")
             return
             
+        # Check if figure is still valid
+        if self.fig is None or not plt.fignum_exists(self.fig.number) or not hasattr(self.fig.canvas, 'get_renderer'):
+            logger.debug("Cannot save plot - figure was closed or not properly initialized")
+            return
+            
         try:
             # Validate output directory first
             self.output_dir.mkdir(exist_ok=True, parents=True)
             save_path = self.output_dir / f"sim_state_{self.current_state.time:.1f}s.png"
-            export_path = str(save_path.resolve())  # MANDATORY path conversion
+            export_path = str(save_path.resolve())
 
+            # Ensure figure is properly rendered before saving
+            self.fig.canvas.draw()
+            
             # Perform actual drawing/saving in one atomic operation
-            with warnings.catch_warnings():  # Ignore closed figure warnings
+            with warnings.catch_warnings():
                 warnings.simplefilter("ignore", RuntimeWarning)
                 self.fig.savefig(export_path, bbox_inches='tight')
 
             logger.info(f"Successfully saved simulation state to:\n{export_path}")
             
-        except RuntimeError as e: 
+        except RuntimeError as e:
             if "closed figure" in str(e):
                 logger.debug("Save attempted on closed figure")
             else:
                 logger.error(f"Matplotlib error: {e}")
-        except PermissionError as pe:
-            logger.critical(f"Permission denied: {pe}")
-        except Exception as e:  # General catch-all
+        except Exception as e:
             logger.error(f"Unexpected error saving plot: {e}")
-            raise  # Preserve stack trace
 
     def _static_plot_setup(self):
         """

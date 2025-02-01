@@ -21,6 +21,7 @@ from ..visualization.matplotlib_visualizer import MatplotlibVisualizer
 from .collision_avoidance import CollisionAvoidanceSystem
 from .collision_detector import CollisionDetector
 from .environment import Environment
+from ..models.collision import CollisionRecord
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +65,7 @@ class SimulationEngine:
         self.environment.set_city(self.config['simulation']['city'])
         
         self.drones: List[Drone] = []
-        self.drone_collisions: List[Tuple[int, int, float]] = []
-        self.building_collisions: List[Tuple[int, int, float, float, float, float]] = []
+        self.collisions: List[CollisionRecord] = []
         self.time = 0.0
         
         self.state_manager = SimulationStateManager()
@@ -91,6 +91,8 @@ class SimulationEngine:
         if avoid_collisions:
             logger.info("Initializing collision avoidance system")
             self.collision_avoidance = CollisionAvoidanceSystem(time_horizon=5.0)
+        
+        self.report_generator = ReportGenerator(Path.cwd() / "output")
 
     def initialize_simulation(self) -> None:
         # City is already initialized in __init__
@@ -139,8 +141,7 @@ class SimulationEngine:
             time=self.time,
             drones=self.drones,
             buildings=self.environment.current_city.buildings,
-            drone_collisions=self.drone_collisions,
-            building_collisions=self.building_collisions
+            collisions=self.collisions
         )
         
         logger.debug("State created, updating observers")
@@ -196,24 +197,20 @@ class SimulationEngine:
                     self.simulation_complete = True
                     self._update_state()  # Final state update
                     
-                    # Generate and save report
-                    report = self.generate_report()
-                    
-                    # Save report to file
-                    output_dir = Path.cwd() / "output"
-                    output_dir.mkdir(exist_ok=True)
-                    report_path = output_dir / f"simulation_report_{self.time:.1f}s.txt"
-                    with open(report_path, 'w') as f:
-                        f.write("="*50 + "\n")
-                        f.write("Simulation Report\n")
-                        f.write("="*50 + "\n")
-                        f.write(report)
+                    # Generate and save report using ReportGenerator
+                    report_path, report_content = self.report_generator.generate_and_save_report(
+                        drones=self.drones,
+                        city_name=self.environment.current_city.name,
+                        simulation_time=self.time,
+                        collisions=self.collisions,
+                        building_count=len(self.environment.current_city.buildings)
+                    )
                     
                     # Output to console
                     sys.stdout.write("\n" + "="*50 + "\n")
                     sys.stdout.write("Simulation Report:\n")
                     sys.stdout.write("="*50 + "\n")
-                    sys.stdout.write(report + "\n")
+                    sys.stdout.write(report_content + "\n")
                     sys.stdout.write(f"\nReport saved to: {report_path}\n")
                     sys.stdout.flush()
                     
@@ -271,7 +268,8 @@ class SimulationEngine:
                 return
 
     def _handle_drone_collision(self, drone1: Drone, drone2: Drone) -> None:
-        self.drone_collisions.append((drone1.id, drone2.id, self.time))
+        collision = CollisionRecord.from_drone_collision(drone1.id, drone2.id, self.time)
+        self.collisions.append(collision)
         drone1.status = DroneStatus.COLLIDED
         drone2.status = DroneStatus.COLLIDED
         logger.info(f"""
@@ -280,33 +278,14 @@ class SimulationEngine:
 
     def _handle_building_collision(self, drone: Drone, building: Building) -> None:
         pos = drone.position
-        # Store building ID (or index if no ID available)
-        building_id = getattr(building, 'id', 0)  # Default to 0 if no ID
-        self.building_collisions.append((drone.id, building_id, self.time, pos[0], pos[1], pos[2]))
+        collision = CollisionRecord.from_building_collision(
+            drone.id, 
+            getattr(building, 'id', 0),
+            self.time,
+            tuple(pos)
+        )
+        self.collisions.append(collision)
         drone.status = DroneStatus.COLLIDED
         logger.info(f"""
             Drone {drone.id} collided with building at ({building.x}, {building.y}) at time {self.time:.1f}s
         """)
-
-    def _count_successful_flights(self) -> int:
-        return sum(1 for drone in self.drones if drone.successful)
-
-    def _calculate_avg_travel_time(self) -> float:
-        successful_times = [drone.travel_time for drone in self.drones if drone.successful]
-        return sum(successful_times) / len(successful_times) if successful_times else 0.0
-
-    def generate_report(self) -> str:
-        """Generate a formatted simulation report"""
-        successful_times = [d.travel_time for d in self.drones if d.successful]
-        avg_success_time = sum(successful_times) / len(successful_times) if successful_times else 0.0
-        
-        return ReportGenerator.generate_report(
-            city_name=self.environment.current_city.name,
-            simulation_time=self.time,
-            total_flights=len(self.drones),
-            successful_flights=self._count_successful_flights(),
-            avg_travel_time=avg_success_time,
-            drone_collisions=self.drone_collisions,
-            building_collisions=self.building_collisions,
-            building_count=len(self.environment.current_city.buildings)
-        )

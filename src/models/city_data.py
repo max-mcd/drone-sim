@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Tuple
 
 from .building import Building
 
@@ -12,3 +12,4 @@ class CityData:
     population_density: int
     takeoff_locations: int
     buildings: List[Building]
+    dimensions: Tuple[float, float, float]

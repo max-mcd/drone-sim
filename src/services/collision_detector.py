@@ -38,8 +38,7 @@ class CollisionDetector:
             return False
 
         # Use smaller buffer if either drone is already yielding
-        is_yielding = hasattr(drone1, '_avoidance_velocity') and drone1._avoidance_velocity is not None or \
-                      hasattr(drone2, '_avoidance_velocity') and drone2._avoidance_velocity is not None
+        is_yielding = drone1._avoidance.is_active or drone2._avoidance.is_active
         
         if is_yielding:
             # Use physical dimensions plus small safety margin for actual collision
@@ -76,7 +75,7 @@ class CollisionDetector:
     def check_building_collision(drone: Drone, building: Building) -> bool:
         """Check for collision between drone and building"""
         # Skip if drone has already collided
-        if drone.status == 'collided':
+        if drone.status == DroneStatus.COLLIDED:
             return False
             
         drone_pos = drone.position

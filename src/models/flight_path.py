@@ -34,17 +34,13 @@ class FlightPath:
             return self.waypoints[self.current_index + 1]
         return None
         
-    def get_next_waypoint(self) -> np.ndarray:
-        """Get the next waypoint in the path"""
-        return self.waypoints[self.current_index]
-        
     def advance_waypoint(self) -> bool:
         """Advance to next waypoint if available
         
         Returns:
-            True if advanced to next waypoint, False if at end of path
+            True if advanced to next waypoint, False if at end
         """
-        if self.current_index + 1 < len(self.waypoints):
+        if self.current_index < len(self.waypoints) - 1:
             self.current_index += 1
             return True
         return False 

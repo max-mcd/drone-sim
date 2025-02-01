@@ -5,6 +5,7 @@ import numpy as np
 
 from .drone_model import DroneModel  # Import DroneModel from correct file
 from .flight_path import FlightPath  # Import FlightPath from correct file
+from .avoidance_system import AvoidanceSystem  # Import AvoidanceSystem from correct file
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +22,7 @@ class Drone:
         self.model = model
         self.position = start.copy()
         self._base_velocity = np.zeros(3)
-        self._avoidance_velocity = None
-        self._avoidance_timer = 0.0
+        self._avoidance = AvoidanceSystem()
         self.flight_path = flight_path
         self.status = DroneStatus.ACTIVE
         self.battery_remaining = model.battery_life * 3600  # Convert to seconds
@@ -34,8 +34,8 @@ class Drone:
     @property
     def velocity(self) -> np.ndarray:
         """Get current velocity, considering avoidance adjustments"""
-        if self._avoidance_velocity is not None:
-            return self._avoidance_velocity
+        if self._avoidance.is_active:
+            return self._avoidance.velocity
         return self._base_velocity
 
     @velocity.setter
@@ -67,14 +67,8 @@ class Drone:
             new_velocity: Modified velocity vector
             duration: How long to maintain this modification (seconds)
         """
-        self._avoidance_velocity = new_velocity
-        self._avoidance_timer = duration
-        logger.debug(f"""
-            Applied avoidance velocity to Drone {self.id}:
-            Original: {self._base_velocity}
-            Modified: {new_velocity}
-            Duration: {duration:.1f}s
-        """)
+        self._avoidance.apply(new_velocity, duration)
+        logger.debug(f"Applied avoidance velocity to Drone {self.id}")
 
     def update(self, dt: float) -> bool:
         """Update drone position and state"""
@@ -89,7 +83,7 @@ class Drone:
             logger.info(f"Drone {self.id} battery depleted")
             return False
         
-        current_waypoint = self.flight_path.get_next_waypoint()
+        current_waypoint = self.flight_path.current_waypoint
         to_waypoint = current_waypoint - self.position
         distance = np.linalg.norm(to_waypoint)
         
@@ -130,12 +124,8 @@ class Drone:
         self.position += self.velocity * dt
         self.travel_time += dt
         
-        # Update avoidance timer
-        if self._avoidance_timer > 0:
-            self._avoidance_timer -= dt
-            if self._avoidance_timer <= 0:
-                self._avoidance_velocity = None
-                logger.debug(f"Drone {self.id} returning to normal velocity")
+        # Update avoidance system
+        self._avoidance.update(dt)
         
         # Debug logging
         logger.debug(f"""
@@ -181,7 +171,7 @@ class Drone:
         Returns:
             Predicted position as numpy array [x, y, z]
         """
-        if self.status != 'active':
+        if self.status != DroneStatus.ACTIVE:
             return self.position
         
         # Get current waypoint and next waypoint
@@ -212,3 +202,19 @@ class Drone:
     def get_safety_buffer(self) -> float:
         """Get minimum safe distance to maintain from other drones"""
         return self.model.calculate_safety_buffer()
+
+    def to_dict(self) -> dict:
+        """Convert drone state to a dictionary for serialization
+        
+        Returns:
+            Dictionary containing drone state data
+        """
+        return {
+            'id': self.id,
+            'position': self.position.tolist(),
+            'velocity': self.velocity.tolist(),
+            'flight_path': [w.tolist() for w in self.flight_path.waypoints],
+            'current_waypoint_index': self.flight_path.current_index,
+            'successful': self.successful,
+            'status': self.status.value  # Use enum value
+        }
