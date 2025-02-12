@@ -15,7 +15,7 @@ FAST=false
 AVOID_COLLISIONS=false
 
 # Default config file
-DEFAULT_CONFIG="config/simulation-config.json"
+DEFAULT_CONFIG="config/simulation_config.json"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do

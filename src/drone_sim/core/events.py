@@ -2,7 +2,6 @@ import time
 from collections import defaultdict
 from typing import Any, Callable
 
-from drone_sim.core.observable import Observable
 from drone_sim.core.simulation_state import SimulationState
 
 import logging

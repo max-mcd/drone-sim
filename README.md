@@ -1,227 +1,192 @@
-# DRONE SIMULATION PROJECT
+# Drone Flight Safety Simulation System
 
-This project is a simulation of a drone flight safety system. It is designed to
-simulate the flight of a drone in a 3D environment and to test the flight safety system.
+A sophisticated Python-based drone simulation system designed to test and validate flight safety protocols, collision avoidance strategies, and multi-drone coordination in urban environments.
 
-## Documentation
+## Features
 
-## Project Structure
+- Real-time 3D simulation of multiple drones with different models and capabilities
+- Advanced collision avoidance system with multiple strategies
+- City environment simulation with buildings and terrain
+- Configurable simulation parameters including time steps and real-time factors
+- Visualization system using Matplotlib
+- Comprehensive event logging and reporting
+- Multiple collision avoidance strategies (hierarchical, probabilistic, emergency, noop)
 
-The project is structured as follows:
+## Installation
 
-- `src/`: Source code for the simulation system.
-- `tests/`: Unit tests for the simulation system.
-- `data/`: Data for the simulation system.
-- `output/`: Contains a screenshot of visualization once the simulation is complete.
-- `docs/`: Documentation for the simulation system. (Not yet implemented)
-- `pyproject.toml`: Project configuration file.
-- `README.md`: This file.
-
-## Run the simulation
-
-You can run the simulation in several ways:
-
-- using the `run.sh` script: uses the default configuration file (`data/config/simulation_config.json`)
-- using the `python -m src.main data/config/simulation_config.json` command, where you can specify
-a different configuration file
-
-### Example configurations
-
-Set your simulation configuration before running the simulation.
-The `data/config` directory contains an example configuration file.
-
-### From repository root (drone-simulation)
+Requires Python 3.11 or higher.
 
 ```bash
-./drone-sim/scripts/run.sh
+# Clone the repository
+git clone [repository-url]
+cd drone-simulation-prototype
+
+# Install dependencies
+pip install .
+
+# For development
+pip install .[dev]
 ```
 
-```bash
-python -m drone-sim.src.main drone-sim/data/config/simulation_config.json
-```
+## Quick Start
 
-## From module directory (drone-sim)
-
+1. Run the simulation with default configuration:
 ```bash
 ./scripts/run.sh
 ```
 
+2. Run with custom configuration:
 ```bash
-python -m src.main data/config/simulation_config.json
+python -m drone_sim.main --config path/to/config.json
 ```
 
-### Command-line options
+## Command-line Options
 
+- `--config`: Path to simulation configuration file (default: config/simulation_config.json)
 - `--fast`: Run simulation without real-time delays
 - `--debug`: Enable detailed debug logging
-- `--avoid-collisions`: Enable the collision avoidance system
-- The first argument is the path to a simulation configuration file
+- `--avoid-collisions <strategy>`: Select collision avoidance strategy (default: basic)
+  - Available strategies: hierarchical, probabilistic, emergency, noop
 
-From `drone-sim` directory, you can run the simulation in debug mode and redirect
-the output to a file:
+## Configuration
+
+### Simulation Configuration (simulation_config.json)
+
+```json
+{
+    "simulation": {
+        "time_step": 0.1,
+        "real_time_factor": 1.0,
+        "duration": 120.0,
+        "dimensions": {
+            "x": 2000.0,
+            "y": 2000.0,
+            "z": 800.0
+        }
+    }
+}
+```
+
+### Collision Avoidance Strategies (collision_strategies.yaml)
+
+Available strategies:
+- **Hierarchical**: Priority-based avoidance using altitude levels
+- **Probabilistic**: Risk assessment based avoidance
+- **Emergency**: Last-resort collision prevention
+- **NoOp**: Baseline strategy with no avoidance (for testing)
+
+Configure strategy parameters in `config/collision_strategies.yaml`.
+
+## Project Structure
+
+```
+drone-simulation-prototype/
+├── config/                 # Configuration files
+├── data/                   # Simulation data (cities, drone models)
+├── output/                 # Simulation output and visualizations
+├── schemas/               # JSON schemas for validation
+├── src/
+│   └── drone_sim/
+│       ├── core/          # Core simulation engine and event system
+│       ├── models/        # Domain models (drones, buildings, flight paths)
+│       ├── systems/       # Simulation subsystems
+│       │   ├── collision/     # Collision detection and avoidance strategies
+│       │   ├── environment/   # City, terrain, and weather simulation
+│       │   ├── movement/      # Drone movement and physics
+│       │   ├── pathfinding/   # Route calculation and optimization
+│       │   ├── state/         # Simulation state management
+│       │   └── visualization/ # Real-time visualization
+│       └── utils/         # Configuration and reporting utilities
+└── tests/                 # Unit and integration tests
+```
+
+## Core Systems
+
+### Control Authority System
+
+The simulation implements control authority through multiple layers:
+
+1. **Physical Authority**
+   - Each drone model defines physical control limits:
+     * Maximum acceleration/deceleration rates
+     * Speed and altitude constraints
+     * Response time parameters
+   - Safety buffers automatically adjust based on current speed and maneuverability
+
+2. **Operational Authority**
+   - Priority-based decision making in collision scenarios
+   - Emergency status overrides for critical situations
+   - Battery life constraints affecting available actions
+   - Payload capacity influencing maneuverability
+
+3. **Decision Authority**
+   - Hierarchical collision avoidance with clear authority chains
+   - Dynamic authority transfer based on drone status
+   - Automatic safety protocol engagement
+   - Real-time adjustment of control parameters
+
+This multi-layered approach ensures safe and efficient drone operations while respecting physical limitations and operational priorities.
+
+### Collision Avoidance System
+
+The collision avoidance system uses a multi-layered approach:
+
+1. **Detection**
+   - Dynamic collision radius calculation based on drone speed and safety parameters
+   - Direct distance-based collision checks between all object pairs
+   - Note: Current implementation needs improvement to handle spatial partitioning efficiently
+
+2. **Resolution Strategies**
+   - Hierarchical: Altitude-based priority system
+   - Probabilistic: Risk-assessment based decisions
+   - Emergency: Last-resort collision prevention
+   - NoOp: Baseline strategy with no avoidance (for testing)
+
+3. **Safety Buffers**
+   - Detection buffer: 30-40m for initial detection
+   - Avoidance buffer: 20-25m for active avoidance
+   - Emergency buffer: 10-15m minimum separation
+
+### Environment System
+
+- Loads and manages city data from JSON files
+- Handles terrain and building collision detection
+- Supports multiple drone models with different characteristics
+
+### Visualization System
+
+- Real-time 3D visualization using Matplotlib
+- Displays drone positions, paths, and collision predictions
+- Configurable view options and debug overlays
+
+## Development
+
+### Running Tests
 
 ```bash
-./scripts/run.sh --debug  &> simulation_run_result.txt
+# Run all tests
+./scripts/test.sh
+
+# Run specific test categories
+pytest tests/unit
+pytest tests/integration
 ```
 
-Note: The output file will be created in the `drone-sim` directory and is in the .gitignore file.
+### Code Style
 
-## Collision Avoidance System
+The project uses:
+- Black for code formatting
+- Flake8 for style checking
+- Ruff for fast linting
 
-The simulation includes a collision avoidance system that can be enabled with the `--avoid-collisions` flag.
-When enabled, the system:
+### Contributing
 
-1. Predicts potential collisions up to 5 seconds ahead
-2. Uses a hierarchical decision system to determine which drone should yield
-3. Applies speed adjustments to avoiding drones based on:
-   - Distance to potential collision
-   - Required separation between drones
-   - Relative velocities
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests and linting
+5. Submit a pull request
 
-The system uses different safety buffers:
+## License
 
-- Large buffer (30-40m) for initial collision prediction
-- Medium buffer (20-25m) for non-yielding drones
-- Small buffer (10-15m) for drones already in avoidance mode
-
-This allows drones to maintain safe distances while still being able to pass each other
-once avoidance maneuvers are initiated.
-
-## Technical Details
-
-### Components and their responsibilities
-
-```text
-Drone Flight Simulation System
-│
-├── Core Framework
-│   ├── Engine (engine.py) - Orchestrates system updates and main loop
-│   ├── Event Bus (events.py) - Pub/sub system for cross-component communication
-│   ├── State Manager (state.py) - Maintains current simulation state
-│   └── Configuration Loader (config_loader.py) - Loads and validates configs
-│
-├── Component Systems
-│   ├── Collision System (collision/)
-│   │   ├── Detector (detector.py) - Checks collisions between Collidable objects
-│   │   ├── Resolver (resolver.py) - Applies avoidance strategies
-│   │   └── Strategies (strategies/) - Different collision resolution implementations
-│   │       ├── emergency.py - Priority-based emergency avoidance
-│   │       └── no_op.py - No avoidance (baseline)
-│   │
-│   ├── Pathfinding System (pathfinding/) - Calculates optimal routes
-│   ├── Environment System (environment.py) - Manages buildings/terrain
-│   └── Visualization System (visualization/) - Renders simulation state
-│       └── matplotlib.py - Matplotlib-based visualizer
-│
-├── Domain Models
-│   ├── Drone (drone.py) - Core drone logic and state
-│   ├── Building (building.py) - Static obstacle representation
-│   └── Flight Path (flight_path.py) - Waypoint sequence management
-│
-├── Protocols (protocols.py) - Defines interface contracts (Collidable, Renderable)
-│
-└── Utilities
-    ├── Config Validation (config_validator.py) - Schema-based validation
-    └── Reporting (reporting.py) - Generates simulation statistics
-```
-
-### Main Data Flow
-
-#### 1. Initialization Phase
-
-```text
-[config/simulation.yaml] → ConfigLoader → Validate → [SimulationEngine]
-     │
-     └──► [models/drone.py] Create drones
-     └──► [models/building.py] Generate environment
-     └──► [systems/__init__.py] Initialize systems
-```
-
-#### 2. Simulation Run Phase (per time step)
-
-```text
-Time Step Trigger
-     │
-     ▼
-[core/engine.py] → Update Systems:
-     │
-     ├──► [systems/environment/system.py] Update weather/terrain
-     │
-     ├──► [systems/pathfinding/system.py] Recalculate routes
-     │       │
-     │       └──► [models/flight_path.py] Adjust waypoints
-     │
-     ├──► [systems/collision/detector.py] Check Collidable objects
-     │       │
-     │       ├──► [protocols.py] Verify Collidable compliance
-     │       │
-     │       └──► [systems/collision/resolver.py] Apply strategy:
-     │               ├──► [strategies/emergency.py] Priority avoidance
-     │               └──► [strategies/no_op.py] Default passthrough
-     │
-     ├──► [core/state.py] Record collision events/position updates
-     │       │
-     │       └──► [utils/reporting.py] Log metrics
-     │
-     └──► [systems/visualization/matplotlib.py] Render frame
-             │
-             └──► [protocols.py] Use Renderable.get_visual_state()
-
-```
-
-#### 3. Reporting Phase
-
-```text
-[core/state.py] Simulation History
-     │
-     ▼
-[utils/reporting.py] → Generate:
-     ├──► Collision Report
-     ├──► Performance Metrics
-     └──► Flight Path Analysis
-```
-
-### Simulation Loop  
-
-```text
-Initialize ──► Load Config (config_loader.py) ──┬──► Setup Environment (environment.py) ──► Generate Buildings (models/building.py)
-       │                                        │
-       │                                        └──► Create Drones (models/drone.py) with FlightPaths (models/flight_path.py)
-       │
-       ▼
-  Start Simulation Loop (core/engine.py)
-       │
-       ▼
-  Update Systems:
-       ├──► Drone Physics (models/drone.py update())
-       ├──► Pathfinding (pathfinding.py)
-       └──► Collision System:
-               │
-               ├──► Broad Phase Check (detector.py)  # Quick spatial partitioning check using grid-based grouping
-               ├──► Narrow Phase Check (detector.py)  # Precise geometric collision check with position prediction
-               ├──► Strategy Resolution (resolver.py):
-               │       ├──► Hierarchical (strategies/hierarchical.py)
-               │       ├──► Emergency (strategies/emergency.py)
-               │       └──► No-Op (strategies/no_op.py)
-               │
-               └──► Apply Avoidance (avoidance_system.py)
-       │
-       ▼
-  Update State (state.py) ───► Log Collisions (reporting.py)
-       │
-       ▼
-  Visualize (matplotlib.py) ◄─── Renderable Protocol (protocols.py)
-       │
-       ▼
-  Check Exit Conditions:
-       ├──► All drones reached destinations (flight_path.py)
-       ├──► Max duration reached
-       └──► User interrupt
-       │
-       ▼
-  Generate Report (reporting.py) ──► Collision Stats ◄─── Protocols (Collidable)
-       │
-       ▼
-  Persist Results ───┬──► Visualization Frames
-                     └──► Simulation Metrics
-```
+[License information]
