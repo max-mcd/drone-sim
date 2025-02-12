@@ -1,0 +1,9 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "algorithm": {"enum": ["a_star", "rrt"]},
+        "update_interval": {"type": "number", "minimum": 0.1}
+    },
+    "required": ["algorithm"]
+} 

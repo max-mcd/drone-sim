@@ -1,6 +1,6 @@
 # DRONE SIMULATION PROJECT
 
-This project is a simulation of a drone flight safety system. It is designed to 
+This project is a simulation of a drone flight safety system. It is designed to
 simulate the flight of a drone in a 3D environment and to test the flight safety system.
 
 ## Documentation
@@ -22,7 +22,7 @@ The project is structured as follows:
 You can run the simulation in several ways:
 
 - using the `run.sh` script: uses the default configuration file (`data/config/simulation_config.json`)
-- using the `python -m src.main data/config/simulation_config.json` command, where you can specify 
+- using the `python -m src.main data/config/simulation_config.json` command, where you can specify
 a different configuration file
 
 ### Example configurations
@@ -57,7 +57,7 @@ python -m src.main data/config/simulation_config.json
 - `--avoid-collisions`: Enable the collision avoidance system
 - The first argument is the path to a simulation configuration file
 
-From `drone-sim` directory, you can run the simulation in debug mode and redirect 
+From `drone-sim` directory, you can run the simulation in debug mode and redirect
 the output to a file:
 
 ```bash
@@ -94,108 +94,134 @@ once avoidance maneuvers are initiated.
 ```text
 Drone Flight Simulation System
 │
-├── Core Components
-│   ├── SimulationEngine (simulation.py)
-│   │   └── Main orchestrator that:
-│   │       - Loads configuration
-│   │       - Manages simulation loop
-│   │       - Coordinates drones and environment
-│   │       - Handles collision detection
-│   │
-│   ├── Environment (environment.py)
-│   │   └── Manages city layout:
-│   │       - Generates buildings
-│   │       - Handles city configuration
-│   │       - Maintains spatial data
-│   │
-│   └── StateManager (state_manager.py)
-│       └── Handles state propagation:
-│           - Maintains current simulation state
-│           - Notifies observers of changes
-│           - Coordinates visualization updates
+├── Core Framework
+│   ├── Engine (engine.py) - Orchestrates system updates and main loop
+│   ├── Event Bus (events.py) - Pub/sub system for cross-component communication
+│   ├── State Manager (state.py) - Maintains current simulation state
+│   └── Configuration Loader (config_loader.py) - Loads and validates configs
 │
-├── Models
-│   ├── Drone
-│   │   ├── Properties: position, velocity, status
-│   │   ├── Behaviors: movement, waypoint navigation
-│   │   └── Uses FlightPath for navigation
+├── Component Systems
+│   ├── Collision System (collision/)
+│   │   ├── Detector (detector.py) - Checks collisions between Collidable objects
+│   │   ├── Resolver (resolver.py) - Applies avoidance strategies
+│   │   └── Strategies (strategies/) - Different collision resolution implementations
+│   │       ├── emergency.py - Priority-based emergency avoidance
+│   │       └── no_op.py - No avoidance (baseline)
 │   │
-│   ├── FlightPath
-│   │   ├── Manages waypoint sequences
-│   │   └── Handles waypoint progression
-│   │
-│   ├── Building
-│   │   └── Represents obstacles with dimensions
-│   │
-│   └── SimulationState
-│       └── Captures complete system state
+│   ├── Pathfinding System (pathfinding/) - Calculates optimal routes
+│   ├── Environment System (environment.py) - Manages buildings/terrain
+│   └── Visualization System (visualization/) - Renders simulation state
+│       └── matplotlib.py - Matplotlib-based visualizer
 │
-├── Visualization
-│   └── MatplotlibVisualizer
-│       ├── Real-time display of:
-│       │   - Drone positions and trails
-│       │   - Building layouts
-│       │   - Flight paths
-│       │   - Collision indicators
-│       └── Handles animation and updates
+├── Domain Models
+│   ├── Drone (drone.py) - Core drone logic and state
+│   ├── Building (building.py) - Static obstacle representation
+│   └── Flight Path (flight_path.py) - Waypoint sequence management
+│
+├── Protocols (protocols.py) - Defines interface contracts (Collidable, Renderable)
 │
 └── Utilities
-    ├── ConfigLoader
-    │   └── Handles JSON configuration parsing
-    │
-    └── ReportGenerator
-        └── Generates simulation statistics
+    ├── Config Validation (config_validator.py) - Schema-based validation
+    └── Reporting (reporting.py) - Generates simulation statistics
 ```
 
 ### Main Data Flow
 
+#### 1. Initialization Phase
+
 ```text
-Configuration Files ─────┐
-                        ▼
-User Input ────► SimulationEngine ◄────► Environment
-                    │   ▲                    │
-                    │   │                    │
-                    ▼   │                    ▼
-                StateManager             Buildings
-                    │   ▲
-                    │   │
-                    ▼   │
-                MatplotlibVisualizer
-                    │
-                    ▼
-                User Display
+[config/simulation.yaml] → ConfigLoader → Validate → [SimulationEngine]
+     │
+     └──► [models/drone.py] Create drones
+     └──► [models/building.py] Generate environment
+     └──► [systems/__init__.py] Initialize systems
+```
+
+#### 2. Simulation Run Phase (per time step)
+
+```text
+Time Step Trigger
+     │
+     ▼
+[core/engine.py] → Update Systems:
+     │
+     ├──► [systems/environment/system.py] Update weather/terrain
+     │
+     ├──► [systems/pathfinding/system.py] Recalculate routes
+     │       │
+     │       └──► [models/flight_path.py] Adjust waypoints
+     │
+     ├──► [systems/collision/detector.py] Check Collidable objects
+     │       │
+     │       ├──► [protocols.py] Verify Collidable compliance
+     │       │
+     │       └──► [systems/collision/resolver.py] Apply strategy:
+     │               ├──► [strategies/emergency.py] Priority avoidance
+     │               └──► [strategies/no_op.py] Default passthrough
+     │
+     ├──► [core/state.py] Record collision events/position updates
+     │       │
+     │       └──► [utils/reporting.py] Log metrics
+     │
+     └──► [systems/visualization/matplotlib.py] Render frame
+             │
+             └──► [protocols.py] Use Renderable.get_visual_state()
+
+```
+
+#### 3. Reporting Phase
+
+```text
+[core/state.py] Simulation History
+     │
+     ▼
+[utils/reporting.py] → Generate:
+     ├──► Collision Report
+     ├──► Performance Metrics
+     └──► Flight Path Analysis
 ```
 
 ### Simulation Loop  
 
 ```text
-Initialize ──► Load Config ───┬──► Setup Environment ──► Generate Buildings
-       │                      │
-       │                      └──► Create Drones
+Initialize ──► Load Config (config_loader.py) ──┬──► Setup Environment (environment.py) ──► Generate Buildings (models/building.py)
+       │                                        │
+       │                                        └──► Create Drones (models/drone.py) with FlightPaths (models/flight_path.py)
        │
        ▼
-  Start Simulation Loop
+  Start Simulation Loop (core/engine.py)
        │
        ▼
-  Update Drone Positions ◄─────┐
-       │                       │
-       ▼                       │
-  Check Collisions             │
-       │                       │
-       ▼                       │
-  Update State                 │
-       │                       │
-       ▼                       │
-  Notify Visualizer            │         Exit Conditions:
-       │                       │         - All drones complete
-       ├───────────────────────┘         - Duration reached
-       │                                 - User interrupts
-       ▼
-  Check Exit Conditions
+  Update Systems:
+       ├──► Drone Physics (models/drone.py update())
+       ├──► Pathfinding (pathfinding.py)
+       └──► Collision System:
+               │
+               ├──► Broad Phase Check (detector.py)  # Quick spatial partitioning check using grid-based grouping
+               ├──► Narrow Phase Check (detector.py)  # Precise geometric collision check with position prediction
+               ├──► Strategy Resolution (resolver.py):
+               │       ├──► Hierarchical (strategies/hierarchical.py)
+               │       ├──► Emergency (strategies/emergency.py)
+               │       └──► No-Op (strategies/no_op.py)
+               │
+               └──► Apply Avoidance (avoidance_system.py)
        │
        ▼
-  Generate Final Report
+  Update State (state.py) ───► Log Collisions (reporting.py)
        │
        ▼
-  Save Visualization
+  Visualize (matplotlib.py) ◄─── Renderable Protocol (protocols.py)
+       │
+       ▼
+  Check Exit Conditions:
+       ├──► All drones reached destinations (flight_path.py)
+       ├──► Max duration reached
+       └──► User interrupt
+       │
+       ▼
+  Generate Report (reporting.py) ──► Collision Stats ◄─── Protocols (Collidable)
+       │
+       ▼
+  Persist Results ───┬──► Visualization Frames
+                     └──► Simulation Metrics
 ```

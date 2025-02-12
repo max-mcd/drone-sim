@@ -1,20 +1,26 @@
 [project]
-name = "drone-simulation"
+name = "drone-sim"
 version = "0.1.0"
 description = "Drone flight safety simulation system"
 requires-python = ">=3.11"
+packages = [
+    { include = "drone_sim", from = "src" },
+]
 
 dependencies = [
-    "numpy>=1.21.0",
+    "jsonschema>=4.0.0",
+    "numpy>=1.24.0,<2.0",
     "pytest>=7.0.0",
     "tabulate>=0.9.0",
-    "matplotlib>=3.7.0",
+    "matplotlib>=3.7.0,<3.8",
+    "pillow>=10.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "black>=22.0.0",
-    "flake8>=4.0.0",
+    "flake8>=7.0.0",
+    "ruff>=0.4.4"
 ]
 
 [build-system]
@@ -22,8 +28,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
+testpaths = [
+    "tests/unit",
+    "tests/integration"
+]
+pythonpath = ["src"]
 addopts = "-v"  # Always run with verbose output
 markers = [
     "integration: marks tests as integration tests",
@@ -39,7 +48,9 @@ exclude = [
     ".venv",
     "__pycache__",
 ]
-line-length = 88
+line-length = 120
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
 
 # Linting specific settings should now be under [tool.ruff.lint]
 [tool.ruff.lint]
@@ -54,3 +65,12 @@ ignore = [
 
 [project.scripts]
 run-tests = "pytest:main"
+
+[tool.poetry]
+name = "drone-sim"
+packages = [
+    { include = "drone_sim", from = "src" },
+]
+
+[tool.poetry.scripts]
+drone-sim = "drone_sim.main:main"

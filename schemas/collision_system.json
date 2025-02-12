@@ -1,0 +1,35 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "grid_resolution": {
+            "type": "number", 
+            "minimum": 1,
+            "description": "Spatial grid cell size in meters"
+        },
+        "strategies": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "string",
+                    "enum": ["hierarchical", "probabilistic"]
+                },
+                "params": {
+                    "type": "object",
+                    "patternProperties": {
+                        "^.*$": {
+                            "type": "object"
+                        }
+                    }
+                }
+            },
+            "required": ["active", "params"]
+        },
+        "avoidance_threshold": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+        }
+    },
+    "required": ["grid_resolution", "strategies"]
+} 

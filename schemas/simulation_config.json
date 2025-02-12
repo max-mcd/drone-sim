@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "simulation": {
+      "type": "object",
+      "properties": {
+        "time_step": {"type": "number", "minimum": 0.1},
+        "duration": {"type": "number", "minimum": 1},
+        "city": {"type": "string"},
+        "dimensions": {
+          "type": "object",
+          "properties": {
+            "x": {"type": "number", "minimum": 100},
+            "y": {"type": "number", "minimum": 100},
+            "z": {"type": "number", "minimum": 50}
+          },
+          "required": ["x", "y", "z"]
+        }
+      },
+      "required": ["time_step", "duration", "dimensions"]
+    },
+    "systems": {
+      "type": "object",
+      "properties": {
+        "visualization": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "real_time": {"type": "boolean"},
+            "dimensions": {
+              "type": "array",
+              "items": {"type": "number"},
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "required": ["enabled", "real_time"]
+        },
+        "collision": {
+          "$ref": "file:./schemas/collision_system.json"
+        }
+      }
+    },
+    "drones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "model": {"type": "string"},
+          "waypoints": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "array",
+              "items": {"type": "number"},
+              "minItems": 3,
+              "maxItems": 3
+            }
+          }
+        },
+        "required": ["model", "waypoints"]
+      }
+    }
+  },
+  "required": ["simulation", "drones"]
+} 

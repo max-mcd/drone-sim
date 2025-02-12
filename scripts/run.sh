@@ -1,59 +1,51 @@
 #!/bin/bash
-cd "$(dirname "$0")/.."  # Move to project root (drone-sim directory)
+cd "$(dirname "$0")/.."
 
-# Set Python path
-export PYTHONPATH=.
+# Fix the venv activation path
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+else
+    echo "Please run: ./scripts/setup.sh first"
+    exit 1
+fi
 
 # Default values
 DEBUG=false
 FAST=false
 AVOID_COLLISIONS=false
 
-# Parse command line arguments
+# Default config file
+DEFAULT_CONFIG="config/simulation-config.json"
+
+# Parse arguments
 while [[ $# -gt 0 ]]; do
-    case $1 in
-        --debug)
-            DEBUG=true
-            shift
+    case "$1" in
+        --config)
+            CONFIG_FILE="$2"
+            shift 2
             ;;
-        --fast)
-            FAST=true
-            shift
-            ;;
-        --avoid-collisions)
-            AVOID_COLLISIONS=true
-            shift
-            ;;
+        --debug) DEBUG=true; shift ;;
+        --fast) FAST=true; shift ;;
+        --avoid-collisions) AVOID_COLLISIONS=true; shift ;;
         *)
-            echo "Unknown option: $1"
-            echo "Usage: $0 [--fast] [--debug] [--avoid-collisions]"
-            exit 1
+            OTHER_ARGS+=" $1"
+            shift
             ;;
     esac
 done
 
-# Initialize base command
-CMD="python -m src.main data/config/simulation_config.json"
+# Use default config if none provided
+CONFIG_FILE="${CONFIG_FILE:-$DEFAULT_CONFIG}"
 
-# Process all flags
-if [ "$FAST" = true ]; then
-    CMD="$CMD --fast"
-fi
+# Build command using venv python
+CMD_ARGS=()
+$FAST && CMD_ARGS+=("--fast")
+$DEBUG && CMD_ARGS+=("--debug")
+$AVOID_COLLISIONS && CMD_ARGS+=("--avoid-collisions")
 
-if [ "$DEBUG" = true ]; then
-    CMD="$CMD --debug"
-fi
+# Run with venv python
+PYTHONPATH=src .venv/bin/python -m drone_sim.main \
+    --config "$CONFIG_FILE" \
+    "${CMD_ARGS[@]}" \
+    $OTHER_ARGS
 
-if [ "$AVOID_COLLISIONS" = true ]; then
-    CMD="$CMD --avoid-collisions"
-fi
-
-# Run the command
-if [[ $CMD == *"--debug"* ]]; then
-    # If debug flag is present, redirect output to file
-    $CMD &> simulation_run_result.txt
-    echo "Debug output saved to simulation_run_result.txt"
-else
-    # Otherwise run normally
-    $CMD
-fi

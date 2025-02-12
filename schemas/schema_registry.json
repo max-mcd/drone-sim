@@ -1,0 +1,10 @@
+{
+    "mappings": {
+        "simulation_config": "simulation_config.json",
+        "simulation_main": "simulation_main.json",
+        "collision_system": "collision_system.json",
+        "drone_models": "drone_models.json",
+        "pathfinding": "pathfinding.json"
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+} 

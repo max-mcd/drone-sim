@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "patternProperties": {
+    "^.*$": {
+      "type": "object",
+      "properties": {
+        "max_speed_m_s": {"type": "number", "minimum": 0},
+        "max_altitude_m": {"type": "number", "minimum": 10},
+        "acceleration_m_s2": {"type": "number", "minimum": 0.1},
+        "deceleration_m_s2": {"type": "number", "minimum": 0.1},
+        "battery_life_hours": {"type": "number", "minimum": 0.1}
+      },
+      "required": ["max_speed_m_s", "max_altitude_m", "acceleration_m_s2", "deceleration_m_s2", "battery_life_hours"]
+    }
+  }
+} 

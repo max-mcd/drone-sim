@@ -1,0 +1,16 @@
+# Configuration for collision avoidance strategies
+strategies:
+  active: hierarchical
+  params:
+    probabilistic: { risk_threshold: 0.7 }
+    gradient_avoidance: 
+      max_avoidance_force: 2.5
+      neighbor_weight: 0.8
+    rule_based:
+      min_separation: 15.0
+      priority: speed_based
+    hierarchical:
+      priority_mode: altitude_based
+      min_speed_factor: 0.3
+      max_speed_factor: 0.7
+      replan_distance: 50.0
